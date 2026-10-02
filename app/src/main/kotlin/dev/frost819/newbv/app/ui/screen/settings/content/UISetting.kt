@@ -42,6 +42,7 @@ import dev.frost819.newbv.app.ui.component.settings.SettingSwitchListItem
 import dev.frost819.newbv.app.ui.component.settings.displayName
 import dev.frost819.newbv.app.ui.screen.main.displayName
 import dev.frost819.newbv.app.ui.screen.settings.SettingsMenuNavItem
+import dev.frost819.newbv.data.datastore.GridColumnCount
 import dev.frost819.newbv.data.datastore.HomeTopNavItem
 import dev.frost819.newbv.data.datastore.LeftNaviItem
 import dev.frost819.newbv.data.datastore.PersonalTopNavItem
@@ -52,7 +53,7 @@ import kotlin.math.roundToInt
 /**
  * 界面设置页。
  *
- * 启动页/首页 Tab/个人页 Tab/显示视频详情/常显进度条/Density/主题模式。
+ * 启动页/首页 Tab/个人页 Tab/显示视频详情/常显进度条/视频网格列数/番剧网格列数/Density/主题模式。
  */
 @Composable
 fun UISetting(modifier: Modifier = Modifier) {
@@ -64,6 +65,8 @@ fun UISetting(modifier: Modifier = Modifier) {
     var showHomepageDialog by remember { mutableStateOf(false) }
     var showPersonalPageDialog by remember { mutableStateOf(false) }
     var showThemeDialog by remember { mutableStateOf(false) }
+    var showVideoColumnsDialog by remember { mutableStateOf(false) }
+    var showBangumiColumnsDialog by remember { mutableStateOf(false) }
 
     var showVideoInfo by remember { mutableStateOf(Prefs.showVideoInfo) }
     var showPersistentSeek by remember { mutableStateOf(Prefs.showPersistentSeek) }
@@ -72,6 +75,8 @@ fun UISetting(modifier: Modifier = Modifier) {
     var selectedFirstPersonalTopNavItem by remember { mutableStateOf(Prefs.firstPersonalTopNavItem) }
     var selectedThemeMode by remember { mutableStateOf(Prefs.themeMode) }
     var density by remember { mutableFloatStateOf(Prefs.density) }
+    var videoColumns by remember { mutableStateOf(Prefs.videoGridColumns) }
+    var bangumiColumns by remember { mutableStateOf(Prefs.bangumiGridColumns) }
 
     Box(modifier = modifier) {
         Column(
@@ -99,8 +104,8 @@ fun UISetting(modifier: Modifier = Modifier) {
                 }
                 item {
                     SettingListItem(
-                        title = "首页置顶 Tab",
-                        supportText = "当前：${selectedFirstHomeTopNavItem.displayName}",
+                        title = "默认首页 Tab",
+                        supportText = "当前：${selectedFirstHomeTopNavItem.displayName}（只决定默认选中项，分类栏顺序固定）",
                         onClick = { showHomepageDialog = true },
                     )
                 }
@@ -138,6 +143,20 @@ fun UISetting(modifier: Modifier = Modifier) {
                             showPersistentSeek = it
                             Prefs.showPersistentSeek = it
                         },
+                    )
+                }
+                item {
+                    SettingListItem(
+                        title = "视频网格列数",
+                        supportText = "当前：${videoColumns.displayName}（B 站视频列表每行显示的卡片数）",
+                        onClick = { showVideoColumnsDialog = true },
+                    )
+                }
+                item {
+                    SettingListItem(
+                        title = "番剧网格列数",
+                        supportText = "当前：${bangumiColumns.displayName}（番剧页每行显示的封面数）",
+                        onClick = { showBangumiColumnsDialog = true },
                     )
                 }
                 item {
@@ -214,6 +233,32 @@ fun UISetting(modifier: Modifier = Modifier) {
             onSelect = {
                 Prefs.themeMode = it
                 selectedThemeMode = it
+            },
+            getDisplayName = { it.displayName },
+        )
+    }
+
+    if (showVideoColumnsDialog) {
+        OptionDialog(
+            options = GridColumnCount.entries.toTypedArray(),
+            selectedOption = videoColumns,
+            onDismiss = { showVideoColumnsDialog = false },
+            onSelect = {
+                Prefs.videoGridColumns = it
+                videoColumns = it
+            },
+            getDisplayName = { it.displayName },
+        )
+    }
+
+    if (showBangumiColumnsDialog) {
+        OptionDialog(
+            options = GridColumnCount.entries.toTypedArray(),
+            selectedOption = bangumiColumns,
+            onDismiss = { showBangumiColumnsDialog = false },
+            onSelect = {
+                Prefs.bangumiGridColumns = it
+                bangumiColumns = it
             },
             getDisplayName = { it.displayName },
         )

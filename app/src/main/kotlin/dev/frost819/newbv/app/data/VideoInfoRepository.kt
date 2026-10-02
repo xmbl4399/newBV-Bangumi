@@ -4,6 +4,7 @@ import dev.frost819.newbv.app.entity.player.VideoListItem
 import dev.frost819.newbv.biliapi.entity.ApiType
 import dev.frost819.newbv.biliapi.entity.video.RelatedVideo
 import dev.frost819.newbv.biliapi.entity.video.VideoDetail
+import dev.frost819.newbv.biliapi.entity.video.season.UgcSeason
 import dev.frost819.newbv.biliapi.repositories.VideoDetailRepository
 import dev.frost819.newbv.core.log.Loggers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -154,21 +155,68 @@ class VideoInfoRepository
         }
 
         /**
-         * 为列表中的每个视频加载 UGC 分 P 信息。
+         * 为**正在播放的那个视频**加载 UGC 分 P 信息。
          *
-         * 仅对有多分 P 的视频生效。
+         * 只有当前播放视频的分 P 会作为分集列表展示，列表里其它项（合集分集、详情页写入
+         * 的分节）的分 P 与本轮播放无关。逐个请求会让一个 12 集合集白拉 11 次 detail 接口
+         * （每次几十上百 KB），因此这里只查 [currentAid]。
+         *
+         * 仅对有多分 P 的视频生效（`pages.size > 1` 才写入）。
          *
          * @param preferApiType 接口类型
+         * @param currentAid 当前播放视频的 AV 号
          */
-        suspend fun updateUgcPages(preferApiType: ApiType) {
+        suspend fun updateUgcPages(
+            preferApiType: ApiType,
+            currentAid: Long,
+        ) {
             _videoList.update { oldList ->
                 oldList.map { item ->
+                    if (item.aid != currentAid) return@map item
                     runCatching {
                         val pages = videoDetailRepository.getUgcPages(aid = item.aid, preferApiType = preferApiType)
                         if (pages.size > 1) item.copy(ugcPages = pages) else item
-                    }.getOrElse { item }
+                    }.getOrElse {
+                        item
+                    }
                 }
             }
+        }
+
+        /**
+         * 用 UGC 合集（`ugc_season`）的分集作为播放列表。
+         *
+         * ⚠️ 这是**分 P 之外的第二数据源**，且优先级低于分 P：合集里的每一集是
+         * **各自独立的视频**（不同 aid），不在 `pages` 里。实测「【官方中字】尼古喵喵
+         * 第1集」`videos=1` 但属于 12 集合集 —— 只认分 P 会导致既没有分集列表、
+         * 也没有「下一集」。调用方应确认当前视频确实没有多分 P 再来退回合集。
+         *
+         * 只在「列表为空或仅有当前视频这一条」时写入：多项列表说明是详情页写入的
+         * 合集/分节列表（或已经写过合集），不能覆盖。
+         *
+         * @param season 合集信息；为 null 或不足两集时什么都不做
+         * @param currentAid 当前播放视频的 AV 号
+         * @return 是否写入了列表
+         */
+        fun updateVideoListFromSeason(
+            season: UgcSeason?,
+            currentAid: Long,
+        ): Boolean {
+            val episodes = season?.sections.orEmpty().flatMap { it.episodes }
+            if (episodes.size <= 1) return false
+            val current = _videoList.value
+            val onlyCurrentVideo = current.isEmpty() || (current.size == 1 && current[0].aid == currentAid)
+            if (!onlyCurrentVideo) return false
+            _videoList.update {
+                episodes.map { episode ->
+                    VideoListItem(
+                        aid = episode.aid,
+                        cid = episode.cid,
+                        title = episode.title,
+                    )
+                }
+            }
+            return true
         }
 
         /**

@@ -1,8 +1,10 @@
 package dev.frost819.newbv.app.ui.component.settings
 
+import dev.frost819.newbv.bangumiapi.entity.BangumiApiSource
 import dev.frost819.newbv.data.datastore.ActionAfterPlay
 import dev.frost819.newbv.data.datastore.ApiType
 import dev.frost819.newbv.data.datastore.Audio
+import dev.frost819.newbv.data.datastore.GridColumnCount
 import dev.frost819.newbv.data.datastore.HomeTopNavItem
 import dev.frost819.newbv.data.datastore.PersonalTopNavItem
 import dev.frost819.newbv.data.datastore.PlaySpeed
@@ -94,6 +96,13 @@ val HomeTopNavItem.displayName: String
             HomeTopNavItem.Dynamics -> "动态"
             HomeTopNavItem.Recommend -> "推荐"
             HomeTopNavItem.Popular -> "热门"
+            HomeTopNavItem.TvAnime -> "TV动画"
+            HomeTopNavItem.AnimeMovie -> "其他动画"
+            HomeTopNavItem.JpDrama -> "日剧"
+            HomeTopNavItem.WesternDrama -> "欧美剧"
+            HomeTopNavItem.ChineseDrama -> "华语剧"
+            HomeTopNavItem.KoreanDrama -> "韩剧"
+            HomeTopNavItem.Movie -> "电影"
         }
 
 /** 个人页 Tab 显示名称。 */
@@ -104,4 +113,16 @@ val PersonalTopNavItem.displayName: String
             PersonalTopNavItem.History -> "历史"
             PersonalTopNavItem.Favorite -> "收藏"
             PersonalTopNavItem.FollowingSeason -> "追番"
+        }
+
+/** 网格列数显示名称（视频网格与番剧网格共用）。 */
+val GridColumnCount.displayName: String
+    get() = "$columns 列"
+
+/** Bangumi 接口地址显示名称（社区反代只显示域名，避免设置项被长 URL 撑爆）。 */val BangumiApiSource.displayName: String
+    get() =
+        when (this) {
+            BangumiApiSource.Official -> "官方 api.bgm.tv"
+            BangumiApiSource.Retr0 -> "反代 bgm.retr0.xyz"
+            BangumiApiSource.Anibt -> "反代 bgmapi.anibt.net"
         }

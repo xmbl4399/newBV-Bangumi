@@ -11,10 +11,10 @@ import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.OndemandVideo
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ViewModule
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.runtime.Composable
@@ -203,7 +203,7 @@ val LeftNaviItem.displayIcon: ImageVector
             LeftNaviItem.Search -> Icons.Default.Search
             LeftNaviItem.Personal -> Icons.Default.Person
             LeftNaviItem.Home -> Icons.Default.Home
-            LeftNaviItem.UGC -> Icons.Default.OndemandVideo
+            LeftNaviItem.UGC -> Icons.Default.ViewModule
             LeftNaviItem.PGC -> Icons.Default.Movie
             LeftNaviItem.Live -> Icons.Default.LiveTv
         }

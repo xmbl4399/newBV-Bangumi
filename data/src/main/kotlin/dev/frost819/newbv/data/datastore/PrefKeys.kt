@@ -72,11 +72,27 @@ internal object PrefKeys {
 
     // ===== 应用界面 =====
     val density = floatPreferencesKey("density")
+
+    /** 界面缩放是否已按屏幕宽度自动初始化过（仅首次启动写一次）。 */
+    val densityInitialized = booleanPreferencesKey("density_initialized")
     val homeLeftNavItem = intPreferencesKey("home_left_nav")
     val firstHomeTopNavItem = intPreferencesKey("first_home_top_nav")
     val firstPersonalTopNavItem = intPreferencesKey("first_personal_top_nav")
     val showHotword = booleanPreferencesKey("shw")
     val themeMode = intPreferencesKey("theme_mode")
+
+    /** B 站视频网格列数（每行卡片数），默认 5。 */
+    val videoGridColumns = intPreferencesKey("video_grid_columns")
+
+    /** 番剧（Bangumi）封面网格列数（每行封面数），默认 7。 */
+    val bangumiGridColumns = intPreferencesKey("bangumi_grid_columns")
+
+    // ===== Bangumi（更多设置） =====
+    /** 隐藏无评分条目（键名与 blbl-Bangumi / PiliPlus-Bangumi 保持一致）。 */
+    val hideNoScoreMedia = booleanPreferencesKey("hide_no_score_media")
+
+    /** Bangumi 接口地址（空串 = 官方优先）。 */
+    val bangumiApiBaseUrl = stringPreferencesKey("bangumi_api_base_url")
 
     // ===== 存储设置 =====
     val cacheThreshold = intPreferencesKey("cache_threshold")

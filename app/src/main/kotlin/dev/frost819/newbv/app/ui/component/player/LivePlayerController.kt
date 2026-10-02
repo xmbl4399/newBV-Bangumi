@@ -118,6 +118,8 @@ fun LivePlayerController(
 
     val gestureTipState = rememberGestureTipState()
     var currentBrightness by remember { mutableFloatStateOf(-1f) }
+    // 音量手势跨事件累积位移：慢速拖动单事件位移不足一档，逐事件取整会被整段吞掉
+    val volumeStepAccumulator = remember { GestureStepAccumulator(VOLUME_GESTURE_STEP_PX) }
 
     fun startControllerAutoHide() {
         if (!showInfoController) return
@@ -249,8 +251,9 @@ fun LivePlayerController(
                                 val audioManager =
                                     context.getSystemService(android.content.Context.AUDIO_SERVICE)
                                         as? android.media.AudioManager
-                                if (audioManager != null) {
-                                    val volumePercent = adjustVolume(audioManager, deltaY)
+                                val steps = volumeStepAccumulator.steps(deltaY)
+                                if (audioManager != null && steps != 0) {
+                                    val volumePercent = adjustVolume(audioManager, steps)
                                     gestureTipState.value =
                                         GestureTipState(
                                             isActive = true,

@@ -169,12 +169,17 @@ fun BVTheme(
  *
  * 必须在根主题 [BVTheme] 内调用一次。嵌套主题（如播放器强制深色）不需要、
  * 也不应重复调用，否则退出后状态栏会停留在内层主题的颜色上。
+ *
+ * 应用已开启 edge-to-edge（见 `MainActivity`）：**新版本上状态栏区域由内容自己绘制**，
+ * 所以这里的状态栏底色取「根 Surface 的背景色」而不是 [androidx.tv.material3.MaterialTheme]
+ * 的 primary —— 否则图标明暗会按一个屏幕上根本看不到的颜色来算，出现浅色图标压在浅色背景上。
+ * 老版本（< Android 15）仍尊重 `statusBarColor`，同一取值也保证版本间视觉一致。
  */
 @Composable
 fun SystemBarsEffect() {
     val view = LocalView.current
     if (view.isInEditMode) return
-    val statusBarColor = TvMaterialTheme.colorScheme.primary
+    val statusBarColor = TvMaterialTheme.colorScheme.surface
     SideEffect {
         val window = (view.context as Activity).window
         window.statusBarColor = statusBarColor.toArgb()

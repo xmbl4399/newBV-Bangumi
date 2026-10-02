@@ -10,6 +10,9 @@ import dev.frost819.newbv.biliapi.entity.video.RelatedVideo
 import dev.frost819.newbv.biliapi.entity.video.UserActions
 import dev.frost819.newbv.biliapi.entity.video.VideoDetail
 import dev.frost819.newbv.biliapi.entity.video.VideoPage
+import dev.frost819.newbv.biliapi.entity.video.season.Episode
+import dev.frost819.newbv.biliapi.entity.video.season.Section
+import dev.frost819.newbv.biliapi.entity.video.season.UgcSeason
 import dev.frost819.newbv.biliapi.repositories.VideoDetailRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -254,7 +257,7 @@ class VideoInfoRepositoryTest {
                 )
             coEvery { videoDetailRepository.getUgcPages(any(), any()) } returns pages
 
-            repository.updateUgcPages(preferApiType = ApiType.Web)
+            repository.updateUgcPages(preferApiType = ApiType.Web, currentAid = 1L)
             advanceUntilIdle()
 
             val updated = repository.videoList.value
@@ -275,7 +278,7 @@ class VideoInfoRepositoryTest {
                 )
             coEvery { videoDetailRepository.getUgcPages(any(), any()) } returns singlePage
 
-            repository.updateUgcPages(preferApiType = ApiType.Web)
+            repository.updateUgcPages(preferApiType = ApiType.Web, currentAid = 1L)
             advanceUntilIdle()
 
             assertThat(repository.videoList.value[0].ugcPages).isNull()
@@ -290,12 +293,128 @@ class VideoInfoRepositoryTest {
 
             coEvery { videoDetailRepository.getUgcPages(any(), any()) } throws RuntimeException("error")
 
-            repository.updateUgcPages(preferApiType = ApiType.Web)
+            repository.updateUgcPages(preferApiType = ApiType.Web, currentAid = 1L)
             advanceUntilIdle()
 
             assertThat(repository.videoList.value[0].ugcPages).isNull()
             assertThat(repository.videoList.value[0].title).isEqualTo("视频1")
         }
+
+    @Test
+    fun `updateUgcPages only queries the currently playing video`() =
+        runTest(testDispatcher) {
+            repository.updateVideoList(
+                listOf(
+                    VideoListItem(aid = 1, cid = 10, title = "第1集"),
+                    VideoListItem(aid = 2, cid = 20, title = "第2集"),
+                ),
+            )
+            advanceUntilIdle()
+
+            coEvery { videoDetailRepository.getUgcPages(any(), any()) } returns
+                listOf(
+                    VideoPage(cid = 20L, index = 1, title = "P1", duration = 60, dimension = Dimension(1920, 1080)),
+                    VideoPage(cid = 21L, index = 2, title = "P2", duration = 60, dimension = Dimension(1920, 1080)),
+                )
+
+            repository.updateUgcPages(preferApiType = ApiType.Web, currentAid = 2L)
+            advanceUntilIdle()
+
+            // 只查正在播放的那一项：合集里其它分集不该被顺带请求 detail 接口
+            coVerify(exactly = 1) { videoDetailRepository.getUgcPages(2L, any()) }
+            coVerify(exactly = 0) { videoDetailRepository.getUgcPages(1L, any()) }
+            assertThat(repository.videoList.value[0].ugcPages).isNull()
+            assertThat(repository.videoList.value[1].ugcPages).hasSize(2)
+        }
+
+    // ── updateVideoListFromSeason ────────────────────────────────────
+
+    @Test
+    fun `updateVideoListFromSeason replaces list with season episodes`() {
+        // 合集分集是各自独立的视频（不同 aid），不在分 P 里 —— 必须能变成分集列表
+        val written = repository.updateVideoListFromSeason(fakeSeason(episodeCount = 3), currentAid = 101L)
+
+        assertThat(written).isTrue()
+        val list = repository.videoList.value
+        assertThat(list).hasSize(3)
+        assertThat(list.map { it.aid }).containsExactly(101L, 102L, 103L).inOrder()
+        assertThat(list[1].title).isEqualTo("第2集")
+        assertThat(list[1].cid).isEqualTo(202L)
+    }
+
+    @Test
+    fun `updateVideoListFromSeason replaces a lone current-video entry`() {
+        // 直进播放器时列表里只有当前视频一条：正是要用合集替换的场景
+        repository.updateVideoList(listOf(VideoListItem(aid = 101, cid = 1, title = "当前视频")))
+
+        val written = repository.updateVideoListFromSeason(fakeSeason(episodeCount = 3), currentAid = 101L)
+
+        assertThat(written).isTrue()
+        assertThat(repository.videoList.value).hasSize(3)
+    }
+
+    @Test
+    fun `updateVideoListFromSeason keeps a multi-item list`() {
+        // 多项列表 = 详情页写入的合集/分节列表（分 P 优先），不能被合集覆盖
+        val existing =
+            listOf(
+                VideoListItem(aid = 101, cid = 1, title = "第1集"),
+                VideoListItem(aid = 102, cid = 2, title = "第2集"),
+            )
+        repository.updateVideoList(existing)
+
+        val written = repository.updateVideoListFromSeason(fakeSeason(episodeCount = 3), currentAid = 101L)
+
+        assertThat(written).isFalse()
+        assertThat(repository.videoList.value).isEqualTo(existing)
+    }
+
+    @Test
+    fun `updateVideoListFromSeason keeps a lone entry of another video`() {
+        // 列表里只有别的视频（例如切集过程中）：同样不覆盖
+        repository.updateVideoList(listOf(VideoListItem(aid = 999, cid = 9, title = "别的视频")))
+
+        val written = repository.updateVideoListFromSeason(fakeSeason(episodeCount = 3), currentAid = 101L)
+
+        assertThat(written).isFalse()
+        assertThat(repository.videoList.value).hasSize(1)
+    }
+
+    @Test
+    fun `updateVideoListFromSeason ignores single episode and null season`() {
+        assertThat(repository.updateVideoListFromSeason(fakeSeason(episodeCount = 1), currentAid = 101L)).isFalse()
+        assertThat(repository.updateVideoListFromSeason(null, currentAid = 101L)).isFalse()
+        assertThat(repository.videoList.value).isEmpty()
+    }
+
+    /** 构造一个 [episodeCount] 集的 UGC 合集（每集独立 aid/cid）。 */
+    private fun fakeSeason(episodeCount: Int): UgcSeason =
+        UgcSeason(
+            id = 1,
+            title = "合集",
+            cover = "",
+            sections =
+                listOf(
+                    Section(
+                        id = 1,
+                        title = "正片",
+                        episodes =
+                            (1..episodeCount).map { index ->
+                                Episode(
+                                    id = index,
+                                    aid = 100L + index,
+                                    bvid = "BV$index",
+                                    cid = 200L + index,
+                                    title = "第$index" + "集",
+                                    longTitle = "第$index" + "集",
+                                    cover = "",
+                                    duration = 60,
+                                    dimension = null,
+                                )
+                            },
+                    ),
+                ),
+        )
 
     // ── updateHistory ────────────────────────────────────────────────
 

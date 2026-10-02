@@ -77,6 +77,9 @@ fun NavGraphBuilder.videoPlayerScreen(navController: NavController) {
             )
             danmakuViewModel.loadDanmakuMask(route.aid, actualCid)
             subtitleViewModel.loadSubtitleList(route.aid, actualCid)
+            // 6.5 直进路径（无详情页上下文）列表为空，以当前视频补种，
+            //     否则「下一集 / 分集」入口与分集列表都不出现（真实 cid 已在第 5 步解析）
+            playerViewModel.seedVideoListIfAbsent()
             // 7. 获取播放地址并开始播放
             playerViewModel.loadVideoWithResources()
         }
@@ -178,7 +181,10 @@ private fun PlayerWindowEffect(keepScreenOn: Boolean) {
         }
         onDispose {
             window?.let {
-                WindowCompat.setDecorFitsSystemWindows(it, true)
+                // 退出播放器后**保持 edge-to-edge**（与 MainActivity 一致），
+                // 只把系统栏重新显示出来。若这里改回 `true`，返回首页时系统不再
+                // 主动避让，状态栏会立刻压回首页顶部分类栏上。
+                WindowCompat.setDecorFitsSystemWindows(it, false)
                 WindowInsetsControllerCompat(it, it.decorView).show(WindowInsetsCompat.Type.systemBars())
             }
         }

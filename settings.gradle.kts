@@ -24,6 +24,7 @@ dependencyResolutionManagement {
 
 rootProject.name = "newBV"
 include(":app")
+include(":bangumi-api")
 include(":bili-api")
 include(":bili-api-grpc")
 include(":bili-subtitle")

@@ -1,6 +1,7 @@
 package dev.frost819.newbv.app.util
 
 import android.content.Context
+import dev.frost819.newbv.bangumiapi.cache.BangumiDiskCache
 import dev.frost819.newbv.data.datastore.Prefs
 import java.io.File
 
@@ -38,6 +39,7 @@ class CacheManager(
             listOf(
                 File(context.cacheDir, IMAGE_CACHE_DIR),
                 File(context.cacheDir, OTHER_CACHE_DIR),
+                File(context.cacheDir, BangumiDiskCache.DIR_NAME),
             ),
     )
 

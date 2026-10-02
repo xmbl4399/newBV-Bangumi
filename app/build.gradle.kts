@@ -117,6 +117,7 @@ ksp {
 
 dependencies {
     // === Project modules ===
+    implementation(project(":bangumi-api"))
     implementation(project(":bili-api"))
     implementation(project(":bili-subtitle"))
     implementation(project(":player"))

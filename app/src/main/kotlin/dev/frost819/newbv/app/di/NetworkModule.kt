@@ -9,6 +9,9 @@ import dagger.hilt.components.SingletonComponent
 import dev.frost819.newbv.BuildConfig
 import dev.frost819.newbv.app.data.AccountRepositoryImpl
 import dev.frost819.newbv.app.network.HttpServer
+import dev.frost819.newbv.bangumiapi.cache.BangumiDiskCache
+import dev.frost819.newbv.bangumiapi.http.BangumiHttpApi
+import dev.frost819.newbv.bangumiapi.repository.BangumiRepository
 import dev.frost819.newbv.biliapi.http.BiliHttpApi
 import dev.frost819.newbv.biliapi.repositories.AuthRepository
 import dev.frost819.newbv.biliapi.repositories.ChannelRepository
@@ -33,6 +36,7 @@ import dev.frost819.newbv.core.interaction.InteractionTracker
 import dev.frost819.newbv.core.log.CrashHandler
 import dev.frost819.newbv.core.log.CrashUploader
 import dev.frost819.newbv.data.db.dao.UserDao
+import dev.frost819.newbv.data.datastore.Prefs
 import dev.frost819.newbv.data.repository.AccountRepository
 import dev.frost819.newbv.data.repository.SearchHistoryRepository
 import dev.frost819.newbv.data.repository.SearchHistoryRepositoryImpl
@@ -181,6 +185,29 @@ object NetworkModule {
     @Provides
     @Singleton
     fun providePgcRepository(): PgcRepository = PgcRepository()
+
+    /**
+     * 提供 [BangumiRepository] 单例。
+     *
+     * 封装 Bangumi（bgm.tv）v0 列表接口 —— 与 B 站接口无关，
+     * 走独立的 `:bangumi-api` 模块（无需鉴权）。
+     *
+     * 首选接口地址由「更多设置 → BGM 接口设置」决定；这里用 lambda 延迟读取，
+     * 设置改了不必重建单例，下一次请求即生效。官方挂掉时自动切社区反代。
+     *
+     * 同时挂上磁盘缓存（`cacheDir/bangumi_api`）：一次完整浏览要发 12 个请求，
+     * 冷启动动辄数秒；落盘后二次进入直接读本地文件。缓存目录已纳入
+     * `CacheManager` 的管理范围，可被「存储设置 → 清空缓存」一并清理。
+     */
+    @Provides
+    @Singleton
+    fun provideBangumiRepository(
+        @ApplicationContext context: Context,
+    ): BangumiRepository =
+        BangumiRepository(
+            httpApi = BangumiHttpApi(preferredBaseUrl = { Prefs.bangumiApiBaseUrl }),
+            cache = BangumiDiskCache(File(context.cacheDir, BangumiDiskCache.DIR_NAME)),
+        )
 
     /**
      * 提供 [SeasonRepository] 单例。

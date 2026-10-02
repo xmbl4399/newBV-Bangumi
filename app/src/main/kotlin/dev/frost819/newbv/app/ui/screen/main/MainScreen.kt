@@ -100,7 +100,13 @@ fun MainScreen(
     }
 
     BackHandler {
-        handleBack()
+        // 侧边栏其它页面（搜索 / 个人 / 分区 / 影视 / 直播）先回主页，再按才进入
+        // 「再按一次退出」倒数 —— 与主页内「内容区先退回顶部分类栏」共同构成层层上退。
+        if (selectedDrawerItem != LeftNaviItem.Home) {
+            selectedDrawerItem = LeftNaviItem.Home
+        } else {
+            handleBack()
+        }
     }
 
     NavigationDrawer(

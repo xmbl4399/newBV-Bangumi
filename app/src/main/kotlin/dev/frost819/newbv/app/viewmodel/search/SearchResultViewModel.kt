@@ -13,12 +13,15 @@ import dev.frost819.newbv.biliapi.repositories.SearchRepository
 import dev.frost819.newbv.biliapi.repositories.SearchType
 import dev.frost819.newbv.core.log.Loggers
 import dev.frost819.newbv.data.datastore.Prefs
+import dev.frost819.newbv.data.repository.SearchHistoryRepository
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
 import dev.frost819.newbv.data.datastore.ApiType as DataApiType
@@ -29,12 +32,15 @@ import dev.frost819.newbv.data.datastore.ApiType as DataApiType
  * 管理 5 类搜索结果（视频/番剧/影视/用户/直播间）的加载、分页、筛选。
  *
  * @param searchRepository 搜索数据仓库
+ * @param searchHistoryRepository 搜索历史仓库：本页是所有搜索入口的汇聚点，
+ *   进入本页即视为一次搜索，历史统一在这里落库
  */
 @HiltViewModel
 class SearchResultViewModel
     @Inject
     constructor(
         private val searchRepository: SearchRepository,
+        private val searchHistoryRepository: SearchHistoryRepository,
     ) : ViewModel() {
         private val logger = Loggers.get("SearchResultViewModel")
 
@@ -49,8 +55,17 @@ class SearchResultViewModel
          * 设置搜索关键词并启动搜索。
          *
          * 重置所有分页和结果，对 4 种类型并行加载第一页。
+         *
+         * 进入本页的入口不止搜索框：自制番剧页点卡片、详情页点 tag 都是直接导航到
+         * 本页（见 `BangumiContent` / `VideoDetailScreen`），这些入口此前不会写搜索
+         * 历史。因此把「一次搜索」的落库收敛到本方法，任何入口都自动被记录；
+         * [SearchHistoryRepository.addHistory] 幂等（同词仅刷新时间）且无痕模式下
+         * 自行跳过，搜索框入口重复写入无副作用。
+         *
+         * @param keyword 搜索关键词；空白串直接忽略（避免写入空历史）
          */
         fun search(keyword: String) {
+            if (keyword.isBlank()) return
             _uiState.update {
                 it.copy(
                     keyword = keyword,
@@ -59,6 +74,10 @@ class SearchResultViewModel
                             TypedSearchResult(type = type)
                         },
                 )
+            }
+            viewModelScope.launch {
+                // 用户可能立刻返回，写入不能随本页销毁而被取消
+                withContext(NonCancellable) { searchHistoryRepository.addHistory(keyword) }
             }
             SearchType.entries.forEach { loadMore(it) }
         }

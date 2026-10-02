@@ -25,6 +25,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -36,6 +37,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -52,6 +54,7 @@ import dev.frost819.newbv.app.ui.component.focusSaverItem
 import dev.frost819.newbv.app.ui.component.livecard.LiveRoomCard
 import dev.frost819.newbv.app.ui.component.livecard.LiveRoomCardData
 import dev.frost819.newbv.app.ui.component.rememberFocusSaver
+import dev.frost819.newbv.app.ui.component.rememberVideoGridColumns
 import dev.frost819.newbv.app.ui.component.search.SearchResultFilter
 import dev.frost819.newbv.app.ui.component.search.UpCard
 import dev.frost819.newbv.app.ui.component.videocard.SeasonCard
@@ -72,6 +75,8 @@ import dev.frost819.newbv.app.viewmodel.common.WatchLaterViewModel
 import dev.frost819.newbv.app.viewmodel.search.SearchResultViewModel
 import dev.frost819.newbv.biliapi.repositories.SearchType
 import dev.frost819.newbv.core.focus.touchClickable
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 
@@ -84,14 +89,19 @@ private val searchTypeLabels =
         SearchType.LiveRoom to "直播间",
     )
 
-private val searchTypeColumns =
-    mapOf(
-        SearchType.Video to 4,
-        SearchType.MediaBangumi to 6,
-        SearchType.MediaFt to 6,
-        SearchType.BiliUser to 5,
-        SearchType.LiveRoom to 4,
-    )
+/**
+ * 结果项在网格里的 FocusSaver key。
+ *
+ * 必须与各卡片上 `focusSaverItem(focusSaver, focusKey)` 用的 key 完全一致，
+ * 否则"分类栏按 ↓ 聚焦第一条结果"会请求不到焦点（requester 未绑定，静默失败）。
+ */
+private fun SearchResultItem.focusSaverKey(): String =
+    when (this) {
+        is SearchResultItem.VideoItem -> "video_${video.aid}"
+        is SearchResultItem.PgcItem -> "pgc_${pgc.seasonId}"
+        is SearchResultItem.UserItem -> "user_${user.mid}"
+        is SearchResultItem.LiveRoomItem -> "live_${room.roomId}"
+    }
 
 /**
  * 搜索结果页内容。
@@ -119,7 +129,9 @@ fun SearchResultContent(
     focusSaver.RestoreFocus()
 
     val activeResult = uiState.results[uiState.activeType] ?: TypedSearchResult(uiState.activeType)
-    val columnCount = searchTypeColumns[uiState.activeType] ?: 4
+    // 每行卡片数跟随「界面设置 → 视频网格列数」（默认 5），与首页/热门/动态同一口径
+    val columnCount = rememberVideoGridColumns()
+    val scope = rememberCoroutineScope()
 
     val isVideoSearchViaWebApi =
         remember {
@@ -134,8 +146,18 @@ fun SearchResultContent(
         runCatching { tabRowFocusRequester.requestFocus() }
     }
 
+    // 返回本页时 composition 会重建、本 effect 会重跑，而 [SearchResultViewModel.search]
+    // 第一件事是清空全部类型的结果并重发 5 个请求（见其 KDoc）——不加以判断，
+    // 从播放器/详情页返回就会看到列表整体闪空重拉（且丢失翻页进度，还会多补一页）。
+    // ViewModel 在返回栈中存活，故关键词一致且已有数据/在途请求时直接复用，不重搜；
+    // 仅首次进入、关键词变化、或上次加载失败（无数据且无在途请求）才真正发起搜索。
     LaunchedEffect(keyword) {
-        if (keyword.isNotBlank()) {
+        if (keyword.isBlank()) return@LaunchedEffect
+        val state = viewModel.uiState.value
+        val alreadyLoaded =
+            state.keyword == keyword &&
+                state.results.values.any { it.items.isNotEmpty() || it.isLoading }
+        if (!alreadyLoaded) {
             viewModel.search(keyword)
         }
     }
@@ -195,7 +217,29 @@ fun SearchResultContent(
 
             // 5 类 Tab 导航
             TopNav(
-                modifier = Modifier.focusRequester(tabRowFocusRequester),
+                modifier =
+                    Modifier
+                        .focusRequester(tabRowFocusRequester)
+                        // 分类栏按「下」进结果列表时，焦点固定给**第一条结果**：
+                        // 按几何位置移动会落到分类项正下方那一列（停在「视频」时就是第 2 条），体验很差
+                        .onPreviewKeyEvent { event ->
+                            if (event.key == Key.DirectionDown && event.type == KeyEventType.KeyDown) {
+                                val firstKey = activeResult.items.firstOrNull()?.focusSaverKey()
+                                if (firstKey == null) {
+                                    false
+                                } else {
+                                    // 先滚回顶部保证第一条已组合（requester 未绑定会静默失败），再请求焦点
+                                    scope.launch {
+                                        gridState.scrollToItem(0)
+                                        delay(50)
+                                        runCatching { focusSaver.focusRequesterFor(firstKey).requestFocus() }
+                                    }
+                                    true
+                                }
+                            } else {
+                                false
+                            }
+                        },
                 items = SearchType.entries.map { SearchTypeNavItem(it) },
                 isLargePadding = !focusOnContent,
                 onSelectedChanged = { item ->

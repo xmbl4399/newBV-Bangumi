@@ -329,6 +329,39 @@ class PlayerViewModel
         }
 
         /**
+         * 直进播放器时补种视频列表。
+         *
+         * 播放器有两条进入路径：详情页进入时列表已由详情页写入（含分 P / 分节结构），
+         * 而搜索卡等直进路径没有详情页上下文，列表为空。由于
+         * [PlayerUiState.hasNextEpisode] 与 [PlayerUiState.isMultiEpisode] 都只从
+         * 列表推导，空列表会让「下一集 / 分集」入口与分集列表**同时消失**；
+         * 且 [VideoInfoRepository.updateUgcPages] 是列表遍历，空列表连分 P 请求
+         * 都不会发出，缺陷会自我固化。
+         *
+         * 这里以当前视频为唯一条目补种，分 P 随后由 [updateVideoPages] 回填。
+         * 列表已含当前视频（详情页路径）时不动它，避免覆盖详情页写入的多节结构。
+         *
+         * 必须在 cid 解析完成后调用：直进路径的 `route.cid` 可能为 0，
+         * 用 0 补种会让 [PlayerUiState.hasNextEpisode] 的分 P 定位失配。
+         */
+        fun seedVideoListIfAbsent() {
+            val state = _uiState.value
+            if (state.aid == 0L) return
+            if (videoInfoRepository.videoList.value.any { it.aid == state.aid }) return
+            videoInfoRepository.updateVideoList(
+                listOf(
+                    VideoListItem(
+                        aid = state.aid,
+                        cid = state.cid,
+                        epid = state.epid,
+                        seasonId = state.seasonId.takeIf { it != 0 },
+                        title = state.title,
+                    ),
+                ),
+            )
+        }
+
+        /**
          * 启动同时观看人数观察者（[init] 时启动，随播放器会话存续）。
          *
          * 响应式监听 uiState 的 cid 变化：cid 就绪（直进时详情返回、
@@ -994,8 +1027,8 @@ class PlayerViewModel
             epid: Int,
         ): MediaUrls {
             val config = loadPlaybackConfig(aid, cid, epid)
-            return resolveMediaUrls(config.qn, config.codec, config.audio)
-                ?: throw IllegalStateException("视频源解析失败")
+            val urls = resolveMediaUrls(config.qn, config.codec, config.audio)
+            return urls ?: throw IllegalStateException("视频源解析失败")
         }
 
         private suspend fun loadPlaybackConfig(
@@ -1170,6 +1203,10 @@ class PlayerViewModel
             val videoUrl = videoCdnCandidates.firstOrNull() ?: return null
             val audioUrl = audioCdnCandidates.firstOrNull()
 
+            // 记录实际使用的视频源主机（截到签名参数之前，不含 token）。PCDN/P2P 边缘节点
+            // 与官方 upos 节点的首帧耗时差好几倍，排查「加载慢 / Source error」先看这一行
+            logger.info { "play host=${videoUrl.substringBefore("/upgcxcode")}" }
+
             _uiState.update { it.copy(videoHeight = foundVideo.height, videoWidth = foundVideo.width) }
             return MediaUrls(videoUrl, audioUrl)
         }
@@ -1198,8 +1235,27 @@ class PlayerViewModel
             }.onFailure { logger.warn { "Load video shot failed: $it" } }
         }
 
+        /**
+         * 拉取当前视频的分 P；**没有分 P 时退回合集（ugc_season）分集**。
+         *
+         * 优先级刻意定为「分 P 优先」：同一个视频可能既有多分 P 又属于某个合集
+         * （例如「全12集」那条同时有 13 个分 P 和 12 集合集），两套都写会让面板把
+         * 当前集再摊开一次、出现重复条目。合集分集是各自独立的视频（不同 aid），
+         * 只在分 P 不足两集时才作为播放列表，解决「尼古喵喵 第1集」这类稿件
+         * 既没有分集列表、也没有「下一集」的问题。
+         */
         private suspend fun updateVideoPages() {
-            videoInfoRepository.updateUgcPages(getApiType())
+            val aid = _uiState.value.aid
+            videoInfoRepository.updateUgcPages(getApiType(), currentAid = aid)
+            val hasMultiPage =
+                videoInfoRepository.videoList.value
+                    .any { it.aid == aid && (it.ugcPages?.size ?: 0) > 1 }
+            if (!hasMultiPage) {
+                videoInfoRepository.updateVideoListFromSeason(
+                    season = videoInfoRepository.videoDetail.value?.ugcSeason,
+                    currentAid = aid,
+                )
+            }
         }
 
         private fun syncProgress(
@@ -1355,12 +1411,19 @@ class PlayerViewModel
         /**
          * 过滤出官方 CDN 候选地址。
          *
-         * 过滤掉 mcdn/szbdyd/IP 地址的 URL，优先使用官方 CDN；若全部被过滤则回退原列表。
+         * 过滤掉 PCDN/P2P 节点（mcdn / mountaintoys 边缘节点）、szbdyd 与裸 IP 地址，
+         * 优先使用官方 upos CDN；若全部被过滤则回退原列表。
+         *
+         * ⚠️ 这些 P2P 节点通常排在 `baseUrl`（列表最前），无 peer 时首帧要等好几秒、
+         * 甚至直接 `Source error`。实测同一视频：`svx61w.edge.mountaintoys.cn` 首帧
+         * 2.4s 且反复缓冲到 7.6s，而它的备选 `upos-sz-*.bilivideo.com` 是官方 CDN，
+         * 因此必须把 mountaintoys 一并过滤，否则「自动选源」关闭时就永远选中 P2P 节点。
          */
         private fun officialCdnCandidates(urls: List<String>): List<String> {
             val filtered =
                 urls
                     .filter { !it.contains(".mcdn.bilivideo.") }
+                    .filter { !it.contains(".mountaintoys.") }
                     .filter { !it.contains(".szbdyd.com") }
                     .filter {
                         !Regex(

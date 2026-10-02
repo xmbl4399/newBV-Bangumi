@@ -33,8 +33,9 @@ import javax.inject.Inject
  * 初始化顺序：
  * 1. Hilt 依赖注入（由 [HiltAndroidApp] 自动处理）
  * 2. [Prefs] 偏好设置初始化（阻塞读取 DataStore 首帧）
- * 3. [CrashHandler] 全局崩溃处理（通过 Hilt 注入，构造时自动 install）
- * 4. [HttpServer] 本地日志管理服务器（通过 Hilt 注入，按需启动）
+ * 3. **界面缩放按屏幕宽度自动初始化**（仅首次启动，见 [initDensityByScreenWidth]）
+ * 4. [CrashHandler] 全局崩溃处理（通过 Hilt 注入，构造时自动 install）
+ * 5. [HttpServer] 本地日志管理服务器（通过 Hilt 注入，按需启动）
  */
 @HiltAndroidApp
 class BVApplication : Application() {
@@ -62,6 +63,7 @@ class BVApplication : Application() {
         super.onCreate()
 
         Prefs.init(dataStore)
+        initDensityByScreenWidth()
 
         val buvid3 = Prefs.buvid3
         val deviceCookies = Prefs.deviceCookies
@@ -150,5 +152,38 @@ class BVApplication : Application() {
         CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
             CacheManager(this@BVApplication).checkCache()
         }
+    }
+
+    /**
+     * 首次启动时按屏幕分辨率决定界面缩放，之后一律沿用该值。
+     *
+     * [Prefs.density] 的语义是 Compose 的 density（1dp = N px），不是"倍率"：
+     * - 720P（1280×720）取 2 会让逻辑宽度只剩 **640dp**，TV 版式被撑爆、一行放不下几个卡片；
+     * - 1080P（1920×1080）取 2 得到 **960dp**，才是正常的 TV 逻辑宽度。
+     *
+     * 因此规则是：**低于 1080P 取 1x，1080P 及以上取 2x**。
+     *
+     * 判据取**屏幕长边**而不是 `widthPixels`：手机竖屏时 widthPixels 只有 1224，
+     * 但它和横屏一样是 1080P 级屏幕，用宽度判会把手机误判成 1x。
+     *
+     * **只在首次启动执行一次**（靠 [Prefs.densityInitialized] 标记）。标记一旦写上，
+     * 后续启动直接 return，用户在「界面设置 → 界面缩放」里选的值得以保留，
+     * 不会每次开 App 又被屏幕分辨率覆盖回去。
+     */
+    private fun initDensityByScreenWidth() {
+        if (Prefs.densityInitialized) return
+        val metrics = resources.displayMetrics
+        val longSidePx = maxOf(metrics.widthPixels, metrics.heightPixels)
+        val density = if (longSidePx >= FHD_LONG_SIDE_PX) 2f else 1f
+        Prefs.density = density
+        Prefs.densityInitialized = true
+        logger.info {
+            "density auto-initialized: ${metrics.widthPixels}x${metrics.heightPixels} -> density=$density"
+        }
+    }
+
+    private companion object {
+        /** 1080P 长边像素数。达到即用 2x，否则（720P 等）退回 1x。 */
+        const val FHD_LONG_SIDE_PX = 1920
     }
 }

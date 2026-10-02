@@ -312,8 +312,8 @@ object Prefs {
         },
     )
 
-    /** 默认弹幕大小。 */
-    var defaultDanmakuScale by pref(PrefKeys.defaultDanmakuScale, 1.75f)
+    /** 默认弹幕大小（200%）。 */
+    var defaultDanmakuScale by pref(PrefKeys.defaultDanmakuScale, 2f)
 
     /** 默认弹幕透明度。 */
     var defaultDanmakuOpacity by pref(PrefKeys.defaultDanmakuOpacity, 0.7f)
@@ -321,8 +321,8 @@ object Prefs {
     /** 默认弹幕速度因子。 */
     var defaultDanmakuSpeedFactor by pref(PrefKeys.defaultDanmakuSpeedFactor, 1f)
 
-    /** 默认弹幕显示区域。 */
-    var defaultDanmakuArea by pref(PrefKeys.defaultDanmakuArea, 0.5f)
+    /** 默认弹幕显示区域（屏高占比，默认 25%）。 */
+    var defaultDanmakuArea by pref(PrefKeys.defaultDanmakuArea, 0.25f)
 
     /** 默认防遮挡蒙版开关。 */
     var defaultDanmakuMask by pref(PrefKeys.defaultDanmakuMask, false)
@@ -348,19 +348,27 @@ object Prefs {
         restore = { PlaySpeed.fromCode(it) },
     )
 
-    /** 显示视频详情页（关闭后点击直接播放）。 */
-    var showVideoInfo by pref(PrefKeys.showVideoInfo, true)
+    /** 显示视频详情页（关闭后点击直接播放）。二改默认关闭：点击卡片直接播放。 */
+    var showVideoInfo by pref(PrefKeys.showVideoInfo, false)
 
-    /** 显示常显进度条。 */
-    var showPersistentSeek by pref(PrefKeys.showPersistentSeek, false)
+    /** 显示常显进度条。二改默认打开：播放器底部常驻迷你进度条。 */
+    var showPersistentSeek by pref(PrefKeys.showPersistentSeek, true)
 
     /** 显示播放器调试信息。 */
     var showPlayerDebugInfo by pref(PrefKeys.showPlayerDebugInfo, false)
 
     // --- 应用界面（PRD 7.2） ---
 
-    /** 界面缩放密度（默认 1f，app 层 init 时按屏幕宽度重新计算）。 */
+    /**
+     * 界面缩放密度（1dp = N px）。
+     *
+     * 默认值 2f 只是兜底：**首次启动由 app 层按屏幕宽度重算**
+     * （720P → 1x、1080P 及以上 → 2x，见 `BVApplication.initDensityByScreenWidth`）。
+     */
     var density by pref(PrefKeys.density, 2f)
+
+    /** 界面缩放是否已按屏幕宽度自动初始化过（仅首次启动写一次，之后尊重用户手动设置）。 */
+    var densityInitialized by pref(PrefKeys.densityInitialized, false)
 
     /** 启动页（左侧导航项）。 */
     var homeLeftNavItem by pref(
@@ -370,10 +378,10 @@ object Prefs {
         restore = { LeftNaviItem.fromOrdinal(it) },
     )
 
-    /** 首页置顶 Tab。 */
+    /** 首页置顶 Tab（默认「热门」，与产品约定一致）。 */
     var firstHomeTopNavItem by pref(
         PrefKeys.firstHomeTopNavItem,
-        HomeTopNavItem.Dynamics,
+        HomeTopNavItem.Popular,
         save = { it.code },
         restore = { HomeTopNavItem.fromCode(it) },
     )
@@ -396,6 +404,48 @@ object Prefs {
         save = { it.ordinal },
         restore = { ThemeMode.fromOrdinal(it) },
     )
+
+    /**
+     * B 站视频网格列数（每行卡片数），**默认 5**。
+     *
+     * 作用于首页（推荐/热门/动态）、个人页（收藏/历史/稍后再看/追番）、
+     * 直播、PGC 番剧等所有使用视频卡片网格的页面。
+     */
+    var videoGridColumns by pref(
+        PrefKeys.videoGridColumns,
+        GridColumnCount.DEFAULT_VIDEO,
+        save = { it.columns },
+        restore = { GridColumnCount.fromColumns(it, GridColumnCount.DEFAULT_VIDEO) },
+    )
+
+    /**
+     * 番剧（Bangumi）封面网格列数（每行封面数），**默认 7**。
+     *
+     * 只作用于二改新增的 Bangumi 分类页（番剧封面卡片比视频卡片窄，列数独立设置）。
+     */
+    var bangumiGridColumns by pref(
+        PrefKeys.bangumiGridColumns,
+        GridColumnCount.DEFAULT_BANGUMI,
+        save = { it.columns },
+        restore = { GridColumnCount.fromColumns(it, GridColumnCount.DEFAULT_BANGUMI) },
+    )
+
+    // --- Bangumi（更多设置） ---
+    /**
+     * 隐藏无评分条目。
+     *
+     * 开启后 Bangumi 分类页（TV动画/其他动画/日剧/…）只保留有评分（score > 0）的条目。
+     * **默认开启**，与 blbl-Bangumi 的 `hideNoScoreMedia`、PiliPlus-Bangumi 的同名项一致。
+     */
+    var hideNoScoreMedia by pref(PrefKeys.hideNoScoreMedia, true)
+
+    /**
+     * Bangumi 接口首选地址（**空串 = 官方 `api.bgm.tv` 优先**）。
+     *
+     * 只是「首选」，不是唯一：请求失败时会自动按「官方 → 社区反代」的顺序兜底换源，
+     * 该行为与设置无关，见 `BangumiHttpApi`。
+     */
+    var bangumiApiBaseUrl by pref(PrefKeys.bangumiApiBaseUrl, "")
 
     // --- 存储设置（PRD 7.6） ---
 
@@ -424,6 +474,34 @@ object Prefs {
                 ?.map { it as? Float ?: 2f }
                 ?.stateIn(scope, SharingStarted.Eagerly, 2f)
                 ?: MutableStateFlow(2f)
+
+    /**
+     * B 站视频网格列数 Flow（实时响应设置变更）。
+     *
+     * 用 `by lazy` 而非 `get()`：`stateIn` 每次求值都会新建一条上游流，
+     * 若放在 getter 里，Compose 每次重组都会重新订阅、设置项改动后界面不刷新。
+     */
+    val videoGridColumnsFlow: StateFlow<GridColumnCount> by lazy {
+        (delegateMap[PrefKeys.videoGridColumns] as? PrefDelegate<GridColumnCount, Int>)
+            ?.flow
+            ?.map { GridColumnCount.fromColumns(it as? Int ?: GridColumnCount.DEFAULT_VIDEO.columns, GridColumnCount.DEFAULT_VIDEO) }
+            ?.stateIn(scope, SharingStarted.Eagerly, GridColumnCount.DEFAULT_VIDEO)
+            ?: MutableStateFlow(GridColumnCount.DEFAULT_VIDEO)
+    }
+
+    /** 番剧（Bangumi）封面网格列数 Flow（实时响应设置变更），说明同 [videoGridColumnsFlow]。 */
+    val bangumiGridColumnsFlow: StateFlow<GridColumnCount> by lazy {
+        (delegateMap[PrefKeys.bangumiGridColumns] as? PrefDelegate<GridColumnCount, Int>)
+            ?.flow
+            ?.map {
+                GridColumnCount.fromColumns(
+                    it as? Int ?: GridColumnCount.DEFAULT_BANGUMI.columns,
+                    GridColumnCount.DEFAULT_BANGUMI,
+                )
+            }
+            ?.stateIn(scope, SharingStarted.Eagerly, GridColumnCount.DEFAULT_BANGUMI)
+            ?: MutableStateFlow(GridColumnCount.DEFAULT_BANGUMI)
+    }
 
     // ===== 初始化 =====
 

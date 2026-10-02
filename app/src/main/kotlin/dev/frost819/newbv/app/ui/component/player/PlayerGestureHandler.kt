@@ -15,6 +15,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.positionChanged
 import kotlin.math.abs
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * 手势状态，用于驱动 [GestureTip] 覆盖层显示。
@@ -41,6 +42,11 @@ enum class GestureTipType {
 }
 
 /**
+ * 长按判定的等待时间（毫秒）：超过它仍未移动即视为长按。
+ */
+const val LONG_PRESS_TIMEOUT_MS = 500L
+
+/**
  * 播放器手势回调。
  *
  * @param onSingleTap 单击：显示/隐藏控制器。
@@ -49,6 +55,8 @@ enum class GestureTipType {
  * @param onSeekCommit seek 提交（手指松开时调用）。
  * @param onBrightnessChange 亮度变化：deltaY > 0 增加亮度，< 0 降低亮度。
  * @param onVolumeChange 音量变化：deltaY > 0 增加音量，< 0 降低音量。
+ * @param onLongPressStart 长按开始：`isLeftHalf` 为 true 表示左半屏（快退），false 为右半屏（快进）。
+ * @param onLongPressEnd 长按结束（手指抬起）：调用方负责恢复倍速 / 停止快退。
  */
 data class PlayerGestureCallbacks(
     val onSingleTap: () -> Unit,
@@ -57,22 +65,27 @@ data class PlayerGestureCallbacks(
     val onSeekCommit: () -> Unit,
     val onBrightnessChange: (deltaY: Float) -> Unit,
     val onVolumeChange: (deltaY: Float) -> Unit,
+    val onLongPressStart: (isLeftHalf: Boolean) -> Unit = {},
+    val onLongPressEnd: () -> Unit = {},
 )
 
 /**
  * 播放器手势处理器。
  *
- * 使用 `awaitEachGesture` 手动分发 5 种手势（PRD 4.3.3.2）：
+ * 使用 `awaitEachGesture` 手动分发 6 种手势（PRD 4.3.3.2）：
  * - 单击：显示/隐藏控制器
  * - 双击：播放/暂停
  * - 水平滑动：快进/快退
  * - 左半屏垂直滑动：亮度调节
- * - 右半屏垂直滑动：音量调节
+ * - 右半屏垂直滑动：音量调节（写系统媒体音量并弹系统音量条）
+ * - **长按**：右半屏 3× 快进、左半屏 3× 快退（见 [PlayerGestureCallbacks.onLongPressStart]）
  *
  * D-pad 模式不受影响——此 modifier 仅处理触摸事件，按键事件由 `onPreviewKeyEvent` 处理。
  *
  * @param totalDuration 视频总时长（毫秒），用于将像素位移转换为时间增量。
- * @param viewWidth 容器宽度（像素），用于判断左/右半屏。
+ * @param controllerVisible 控制器（信息栏+进度条）是否可见。可见时水平拖拽交给进度条处理。
+ * @param enabled 手势是否生效。覆盖层（选集/相关视频整合页）打开时应返回 false：
+ *   否则在页面上滑动会同时触发视频的亮度/音量手势。默认始终生效。
  * @param callbacks 手势回调。
  * @param gestureTipState 手势提示状态（外部持有，用于驱动覆盖层 UI）。
  */
@@ -86,7 +99,8 @@ fun rememberGestureTipState(): androidx.compose.runtime.MutableState<GestureTipS
  * 使用 `awaitEachGesture` 手动分发触摸事件，避免多个 `detectXxxGestures` 互相消费事件。
  *
  * @param totalDuration 视频总时长（毫秒）。
- * @param controllerVisible 控制器（信息栏+进度条）是否可见。可见时水平拖拽交给进度条处理。
+ * @param controllerVisible 控制器（信息栏+进度条）是否可见。
+ * @param enabled 手势是否生效（覆盖层打开时置 false）。
  * @param callbacks 手势回调集合。
  * @param gestureTipState 手势提示状态（外部持有）。
  */
@@ -95,6 +109,7 @@ fun Modifier.playerGestures(
     controllerVisible: () -> Boolean,
     callbacks: PlayerGestureCallbacks,
     gestureTipState: androidx.compose.runtime.MutableState<GestureTipState>,
+    enabled: () -> Boolean = { true },
 ): Modifier =
     this.pointerInput(Unit) {
         val doubleTapTimeout = 300L
@@ -105,6 +120,9 @@ fun Modifier.playerGestures(
 
         awaitEachGesture {
             val firstDown = awaitFirstDown(requireUnconsumed = false)
+            // 覆盖层打开时不参与视频手势：事件留给页面自己的点击/滚动
+            if (!enabled()) return@awaitEachGesture
+
             val startTime = System.currentTimeMillis()
             val startX = firstDown.position.x
             val startY = firstDown.position.y
@@ -114,21 +132,35 @@ fun Modifier.playerGestures(
             var totalDeltaX = 0f
             var totalDeltaY = 0f
             var isHorizontalDrag: Boolean? = null
+            var isLeftHalf = startX < width / 2
+            var longPressTriggered = false
 
             while (true) {
-                val event = awaitPointerEvent(PointerEventPass.Main)
-                val changes = event.changes
+                // 超过长按阈值仍没有指针事件（手指按住不动）⇒ 判定为长按，之后继续等抬起
+                val event =
+                    withTimeoutOrNull(if (!isDragging && !longPressTriggered) LONG_PRESS_TIMEOUT_MS else Long.MAX_VALUE) {
+                        awaitPointerEvent(PointerEventPass.Main)
+                    }
+                if (event == null) {
+                    if (!isDragging && !longPressTriggered) {
+                        longPressTriggered = true
+                        callbacks.onLongPressStart(isLeftHalf)
+                    }
+                    continue
+                }
 
+                val changes = event.changes
                 val change = changes.firstOrNull() ?: continue
 
                 if (!change.pressed) {
                     // 手指抬起
-                    val duration = System.currentTimeMillis() - startTime
-
                     // 如果事件已被子组件消费（如按钮点击），跳过手势处理
                     if (change.isConsumed) break
 
-                    if (isDragging) {
+                    if (longPressTriggered) {
+                        callbacks.onLongPressEnd()
+                        gestureTipState.value = GestureTipState(isActive = false)
+                    } else if (isDragging) {
                         if (isHorizontalDrag == true) {
                             callbacks.onSeekCommit()
                         }
@@ -155,6 +187,9 @@ fun Modifier.playerGestures(
 
                 // 如果事件已被子组件消费（如进度条拖拽），跳过移动处理
                 if (change.isConsumed) continue
+
+                // 长按期间忽略位移：避免长按后轻微抖动被当成亮度/音量拖拽
+                if (longPressTriggered) continue
 
                 // 手指移动中
                 if (change.positionChanged()) {
@@ -189,7 +224,7 @@ fun Modifier.playerGestures(
                     } else if (isHorizontalDrag == false) {
                         // 垂直拖拽 → 亮度/音量
                         // Compose 中 y 向下为正，上滑（deltaY < 0）应增加亮度/音量，故取反
-                        val isLeftHalf = startX < width / 2
+                        isLeftHalf = startX < width / 2
                         if (isLeftHalf) {
                             callbacks.onBrightnessChange(-deltaY)
                         } else {
@@ -231,24 +266,63 @@ fun adjustBrightness(
 }
 
 /**
- * 音量调节辅助函数。
+ * 音量手势每档对应的一屏垂直位移（px）。
  *
- * @param audioManager 系统音频管理器。
- * @param deltaY 垂直位移增量（正值增加音量，负值降低音量）。
- * @return 调整后的音量百分比（0~100）。
+ * 实测 1280×720 上取 80px：整屏高度约合 9 档，与系统音量默认 15 档的手感接近。
+ */
+const val VOLUME_GESTURE_STEP_PX = 80f
+
+/**
+ * 步进累积器。
+ *
+ * 手势回调是**按事件**给位移的，而慢速拖动时单个事件的位移往往不足一个步进阈值
+ * （实测右半屏 2000ms 拖完 400px，逐事件位移只有几 px）。若逐事件取整，整段位移
+ * 会被吞掉 —— 表现为「快速滑一下能调、慢慢拖完全没反应」。
+ *
+ * 这里把不足一步的余量跨事件累积，凑够一步才返回步数，使音量响应只与**总位移**
+ * 有关、与拖动速度无关。
+ *
+ * @param stepPx 一步对应的位移量（同正负号体系）
+ */
+class GestureStepAccumulator(private val stepPx: Float) {
+    private var pending = 0f
+
+    /**
+     * 累积本次位移，返回应执行的步数。
+     *
+     * @param delta 本次事件的位移（正负表示方向），不足一步时返回 0
+     */
+    fun steps(delta: Float): Int {
+        pending += delta
+        val whole = (pending / stepPx).toInt()
+        if (whole != 0) pending -= whole * stepPx
+        return whole
+    }
+}
+
+/**
+ * 按步数调整系统媒体音量，并**弹出系统音量条**。
+ *
+ * 直接写 `STREAM_MUSIC` 的流音量（作用于整个系统媒体输出），并带
+ * [AudioManager.FLAG_SHOW_UI] 让系统自己显示音量面板 —— UI 侧因此不再画自定义音量提示。
+ *
+ * @param audioManager 系统音频管理器
+ * @param deltaSteps 音量步数（正数增大、负数减小）；为 0 时只读取当前值
+ * @return 调整后的音量百分比（0~100）
  */
 fun adjustVolume(
     audioManager: AudioManager,
-    deltaY: Float,
+    deltaSteps: Int,
 ): Int {
     val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
     val currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
-    val deltaSteps = (deltaY / 80f).toInt()
-    val newVolume = (currentVolume + deltaSteps).coerceIn(0, maxVolume)
-    audioManager.setStreamVolume(
-        AudioManager.STREAM_MUSIC,
-        newVolume,
-        0,
-    )
-    return (newVolume.toFloat() / maxVolume.toFloat() * 100).toInt()
+    val targetVolume = (currentVolume + deltaSteps).coerceIn(0, maxVolume)
+    if (targetVolume != currentVolume) {
+        audioManager.setStreamVolume(
+            AudioManager.STREAM_MUSIC,
+            targetVolume,
+            AudioManager.FLAG_SHOW_UI,
+        )
+    }
+    return if (maxVolume > 0) (targetVolume.toFloat() / maxVolume.toFloat() * 100).toInt() else 0
 }

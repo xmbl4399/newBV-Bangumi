@@ -24,12 +24,17 @@ class ControllerVideoInfoBottomTest {
     @get:Rule
     val composeRule = createComposeRule()
 
-    private fun setContent(isPgc: Boolean) {
+    private fun setContent(
+        isPgc: Boolean,
+        hasNextEpisode: Boolean = true,
+        isPlaying: Boolean = true,
+    ) {
         composeRule.setContent {
             TvMaterialTheme {
                 Box(modifier = Modifier.fillMaxSize()) {
                     ControllerVideoInfoBottom(
                         isSeeking = false,
+                        isPlaying = isPlaying,
                         goTime = 0L,
                         seekerState = SeekerState(totalDuration = 600_000L, currentTime = 120_000L),
                         videoShot = null,
@@ -37,11 +42,13 @@ class ControllerVideoInfoBottomTest {
                         isPgc = isPgc,
                         danmakuEnabled = true,
                         isLooping = false,
+                        hasNextEpisode = hasNextEpisode,
                         onDirectionLeft = {},
                         onDirectionRight = {},
                         onSeekGoTime = {},
                         onSeekToPosition = {},
                         onPlayPause = {},
+                        onPlayNext = {},
                         onDanmakuSwitchChange = {},
                         onShowSettings = {},
                         onShowRelatedVideos = {},
@@ -79,8 +86,47 @@ class ControllerVideoInfoBottomTest {
     fun pgc_still_shows_play_danmaku_and_settings_buttons() {
         setContent(isPgc = true)
 
-        composeRule.onNodeWithContentDescription("播放/暂停").assertExists()
+        // 播放中按钮承载的是「暂停」动作
+        composeRule.onNodeWithContentDescription("暂停").assertExists()
         composeRule.onNodeWithContentDescription("弹幕开关").assertExists()
         composeRule.onNodeWithContentDescription("打开设置").assertExists()
+    }
+
+    @Test
+    fun playing_shows_pause_icon_only() {
+        setContent(isPgc = false, isPlaying = true)
+
+        composeRule.onNodeWithContentDescription("暂停").assertExists()
+        composeRule.onNodeWithContentDescription("播放").assertDoesNotExist()
+    }
+
+    @Test
+    fun paused_shows_play_icon_only() {
+        setContent(isPgc = false, isPlaying = false)
+
+        composeRule.onNodeWithContentDescription("播放").assertExists()
+        composeRule.onNodeWithContentDescription("暂停").assertDoesNotExist()
+    }
+
+    @Test
+    fun has_next_episode_shows_next_button() {
+        setContent(isPgc = false, hasNextEpisode = true)
+
+        composeRule.onNodeWithContentDescription("下一集").assertExists()
+    }
+
+    @Test
+    fun no_next_episode_hides_next_button() {
+        setContent(isPgc = false, hasNextEpisode = false)
+
+        composeRule.onNodeWithContentDescription("下一集").assertDoesNotExist()
+    }
+
+    @Test
+    fun playlist_button_no_longer_exists() {
+        // 分集列表改为跟随底部控件显隐，控件行不再有独立「分集」入口
+        setContent(isPgc = false, hasNextEpisode = true)
+
+        composeRule.onNodeWithContentDescription("分集").assertDoesNotExist()
     }
 }

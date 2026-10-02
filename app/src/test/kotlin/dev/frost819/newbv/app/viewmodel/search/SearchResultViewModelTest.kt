@@ -11,6 +11,7 @@ import dev.frost819.newbv.biliapi.repositories.SearchType
 import dev.frost819.newbv.biliapi.repositories.SearchTypePage
 import dev.frost819.newbv.biliapi.repositories.SearchTypeResult
 import dev.frost819.newbv.data.datastore.Prefs
+import dev.frost819.newbv.data.repository.SearchHistoryRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
@@ -42,6 +43,7 @@ class SearchResultViewModelTest {
     private val testDispatcher = StandardTestDispatcher()
 
     private lateinit var searchRepo: SearchRepository
+    private lateinit var searchHistoryRepository: SearchHistoryRepository
     private lateinit var viewModel: SearchResultViewModel
 
     companion object {
@@ -157,6 +159,7 @@ class SearchResultViewModelTest {
         runBlocking { Prefs.clear() }
 
         searchRepo = mockk()
+        searchHistoryRepository = mockk(relaxed = true)
 
         coEvery {
             searchRepo.searchType(
@@ -218,7 +221,7 @@ class SearchResultViewModelTest {
             )
         } returns fakeLiveRoomSearchResult(listOf(fakeLiveRoomResult(1718159119L)))
 
-        viewModel = SearchResultViewModel(searchRepo)
+        viewModel = SearchResultViewModel(searchRepo, searchHistoryRepository)
     }
 
     @AfterEach

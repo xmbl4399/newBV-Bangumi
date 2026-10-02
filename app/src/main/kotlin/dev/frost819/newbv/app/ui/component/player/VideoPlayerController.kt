@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -63,9 +64,8 @@ import kotlinx.coroutines.launch
  * 2. BottomSubtitle — 字幕文本
  * 3. SkipTips — 跳转提示
  * 4. PlayStateTips — 播放状态提示
- * 5. RelatedVideosController — 相关视频
+ * 5. PlayerExploreController — 选集 / 相关视频整合页（左分集栏 + 右相关栏）
  * 6. ControllerVideoInfo — 信息栏 + 进度条 + 按钮
- * 7. VideoListController — 分集列表
  * 8. MenuController — 设置菜单
  */
 @Composable
@@ -107,14 +107,13 @@ fun VideoPlayerController(
     val scope = rememberCoroutineScope()
 
     // 覆盖层可见性
-    var showListController by remember { mutableStateOf(false) }
     var showMenuController by remember { mutableStateOf(false) }
     var showInfoSeekController by remember { mutableStateOf(false) }
     var showRelatedVideosController by remember { mutableStateOf(false) }
+
     val showClickableControllers by remember {
         derivedStateOf {
-            showListController ||
-                showMenuController ||
+            showMenuController ||
                 showInfoSeekController ||
                 showRelatedVideosController
         }
@@ -127,6 +126,14 @@ fun VideoPlayerController(
     var lastSeekChangeTime by remember { mutableLongStateOf(0L) }
     var seekCountdown: Job? by remember { mutableStateOf(null) }
     var hideInfoSeekCountdown: Job? by remember { mutableStateOf(null) }
+    var hideExploreCountdown: Job? by remember { mutableStateOf(null) }
+
+    // 多集内容进入播放器后自动亮出一次底部控件（分集列表随之一同出现），只自动亮一次
+    var controlsAutoShown by remember { mutableStateOf(false) }
+
+    // 本次唤出的焦点落点：自动亮出 / 上键 → 分集列表；下键 → 播放控件行。
+    // 由唤出方统一决定，避免「分集列表和进度条各自抢焦点」的竞态（见 PlayerOverlayFocus）。
+    var overlayFocus by remember { mutableStateOf(PlayerOverlayFocus.None) }
 
     // 常显进度条
     var showPersistentSeek by remember { mutableStateOf(Prefs.showPersistentSeek) }
@@ -134,6 +141,15 @@ fun VideoPlayerController(
     // 手势状态
     val gestureTipState = rememberGestureTipState()
     var currentBrightness by remember { mutableFloatStateOf(-1f) }
+    // 长按倍速：仅右半屏 3× 快进（左半屏的 3× 倒播已按用户要求移除）
+    val longPressSpeed = 3f
+    var longPressSpeedActive by remember { mutableStateOf(false) }
+    var longPressSavedSpeed by remember { mutableFloatStateOf(1f) }
+    // 长按上键关闭整合页后，屏蔽上键的时长（毫秒）；期间的上键事件一律吞掉
+    val upKeySuppressMs = 3000L
+    var upKeySuppressUntil by remember { mutableStateOf(0L) }
+    // 音量手势跨事件累积位移：慢速拖动单事件位移不足一档，逐事件取整会被整段吞掉
+    val volumeStepAccumulator = remember { GestureStepAccumulator(VOLUME_GESTURE_STEP_PX) }
 
     fun calCoefficient(): Long =
         if (System.currentTimeMillis() - lastSeekChangeTime < 200) {
@@ -198,6 +214,9 @@ fun VideoPlayerController(
     fun startControllerAutoHide() {
         if (!showInfoSeekController) return
         hideInfoSeekCountdown?.cancel()
+        // 整合页打开时不动底部控件：卡片以「视频标题 + 播放控件」为上下边框，
+        // 控件被收起会让卡片悬空
+        if (showRelatedVideosController) return
         hideInfoSeekCountdown =
             scope.launch {
                 delay(5000)
@@ -214,10 +233,26 @@ fun VideoPlayerController(
     }
 
     fun closeAllControllers() {
-        showListController = false
+        hideExploreCountdown?.cancel()
         showMenuController = false
         showInfoSeekController = false
         showRelatedVideosController = false
+    }
+
+    /**
+     * 整合页自动关闭计时器。唤出后 5 秒无操作自动收掉整页（含底部控件）。
+     *
+     * 与 [startControllerAutoHide] 一样在每次按键时重置；页面内的触摸也会通过
+     * `onUserInteraction` 回调重置，否则一边翻列表一边会被关掉。
+     */
+    fun startExploreAutoHide() {
+        if (!showRelatedVideosController) return
+        hideExploreCountdown?.cancel()
+        hideExploreCountdown =
+            scope.launch {
+                delay(5000)
+                closeAllControllers()
+            }
     }
 
     /**
@@ -246,7 +281,11 @@ fun VideoPlayerController(
         var status: String? = null
         when (action) {
             PlayerCustomShortcutAction.OpenSettings -> showMenuController = true
-            PlayerCustomShortcutAction.OpenRelatedVideos -> showRelatedVideosController = true
+            PlayerCustomShortcutAction.OpenRelatedVideos -> {
+                overlayFocus = PlayerOverlayFocus.Related
+                showRelatedVideosController = true
+                startExploreAutoHide()
+            }
             PlayerCustomShortcutAction.PlayPrevious -> onPlayPrevious()
             PlayerCustomShortcutAction.PlayNext -> onPlayNext()
             PlayerCustomShortcutAction.OpenVideoDetail -> onGoToVideoDetail()
@@ -342,6 +381,38 @@ fun VideoPlayerController(
                 if (uiState.playerState == PlayerState.Playing) onPause()
                 return true
             }
+
+            Key.DirectionUp -> {
+                val now = System.currentTimeMillis()
+                // 长按关闭后的屏蔽窗口：按住不放时紧随的 repeat 事件会走到下面的"开页"分支，
+                // 把刚关掉的整合页又呼出来，故窗口内的上键一律吞掉；按住期间窗口顺延，
+                // 避免长按超过窗口时长时松手前又弹出
+                if (now < upKeySuppressUntil) {
+                    if (event.nativeKeyEvent.repeatCount > 0) {
+                        upKeySuppressUntil = now + upKeySuppressMs
+                    }
+                    return true
+                }
+                if (showRelatedVideosController) {
+                    // 整合页已打开：**长按**上键才关闭整页；**短按直接放行**，
+                    // 交给焦点系统在分集栏/相关栏里上移焦点
+                    // （曾做过"再按一次即关"的开关式，用户否决：那样列表无法上移）
+                    if (event.nativeKeyEvent.isLongPress || event.nativeKeyEvent.repeatCount > 0) {
+                        closeAllControllers()
+                        upKeySuppressUntil = now + upKeySuppressMs
+                        return true
+                    }
+                    return false
+                }
+                // 否则打开整合页（控件可见时也实时响应）：先把播放控件收起，
+                // 免得它与页面抢焦点；焦点交给左侧分集栏的当前集
+                hideInfoSeekCountdown?.cancel()
+                showInfoSeekController = false
+                overlayFocus = PlayerOverlayFocus.EpisodeList
+                showRelatedVideosController = true
+                startExploreAutoHide()
+                return true
+            }
         }
 
         // 覆盖层未打开时的按键（KeyUp 已被顶层过滤，此处均为 KeyDown）
@@ -363,13 +434,11 @@ fun VideoPlayerController(
                     }
                 }
 
-                Key.DirectionUp -> {
-                    showListController = true
-                    return true
-                }
-
                 Key.DirectionDown -> {
+                    // 下键：唤出界面并把焦点落在底部播放控件行
+                    overlayFocus = PlayerOverlayFocus.ControlBar
                     showInfoSeekController = true
+                    startControllerAutoHide()
                     return true
                 }
 
@@ -394,23 +463,44 @@ fun VideoPlayerController(
         return false
     }
 
+    // 多集内容进入播放器后自动亮出一次底部控件（提示「相关视频」页里能选集），
+    // 随后按 5s 无操作收起。单集内容不自动亮，避免无意义遮挡；
+    // controlsAutoShown 只置一次，用户手动收起后不再重弹。
+    LaunchedEffect(uiState.isMultiEpisode, uiState.videoList.size) {
+        if (!controlsAutoShown && uiState.isMultiEpisode && uiState.videoList.isNotEmpty()) {
+            controlsAutoShown = true
+            // 整合页不再自动弹列表，焦点沿用旧行为（进度条）
+            overlayFocus = PlayerOverlayFocus.None
+            showInfoSeekController = true
+            startControllerAutoHide()
+        }
+    }
+
     Box(
         modifier =
             modifier
                 .background(Color.Black)
                 .focusable()
                 .onPreviewKeyEvent { event ->
+                    // 任何按键都重置底部控件的 5s 自动收起计时，以及整合页的 5s 自动关闭计时
                     startControllerAutoHide()
+                    startExploreAutoHide()
                     handleKeyEvent(event)
                 }.playerGestures(
                     totalDuration = { seekerState.value.totalDuration },
                     controllerVisible = { showInfoSeekController },
+                    // 整合页打开时屏蔽视频手势：否则在页面上滑动会同时触发亮度/音量
+                    enabled = { !showRelatedVideosController },
                     callbacks =
                         PlayerGestureCallbacks(
                             onSingleTap = {
                                 if (!showClickableControllers) {
                                     showInfoSeekController = !showInfoSeekController
-                                    if (showInfoSeekController) startControllerAutoHide()
+                                    if (showInfoSeekController) {
+                                        // 触屏唤出没有方向键语义，沿用旧行为（焦点交给进度条）
+                                        overlayFocus = PlayerOverlayFocus.None
+                                        startControllerAutoHide()
+                                    }
                                 } else {
                                     closeAllControllers()
                                 }
@@ -437,18 +527,35 @@ fun VideoPlayerController(
                                 }
                             },
                             onVolumeChange = { deltaY ->
+                                // 音量交给系统音量条（adjustVolume 带 FLAG_SHOW_UI），不再画自定义提示
                                 val audioManager =
                                     context.getSystemService(android.content.Context.AUDIO_SERVICE)
                                         as? android.media.AudioManager
-                                if (audioManager != null) {
-                                    val volumePercent = adjustVolume(audioManager, deltaY)
+                                val steps = volumeStepAccumulator.steps(deltaY)
+                                if (audioManager != null && steps != 0) {
+                                    adjustVolume(audioManager, steps)
+                                }
+                            },
+                            // 长按：仅右半屏 3× 快进（松开恢复原倍速）；左半屏不做任何处理
+                            onLongPressStart = { isLeftHalf ->
+                                if (!isLeftHalf) {
+                                    longPressSavedSpeed = uiState.playSpeed
+                                    longPressSpeedActive = true
+                                    onPlaySpeedChange(longPressSpeed)
                                     gestureTipState.value =
                                         GestureTipState(
                                             isActive = true,
-                                            type = GestureTipType.Volume,
-                                            value = volumePercent.toFloat(),
+                                            type = GestureTipType.Speed,
+                                            value = longPressSpeed,
                                         )
                                 }
+                            },
+                            onLongPressEnd = {
+                                if (longPressSpeedActive) {
+                                    longPressSpeedActive = false
+                                    onPlaySpeedChange(longPressSavedSpeed)
+                                }
+                                gestureTipState.value = GestureTipState(isActive = false)
                             },
                         ),
                     gestureTipState = gestureTipState,
@@ -529,16 +636,27 @@ fun VideoPlayerController(
                 errorMessage = (uiState.playerState as? PlayerState.Error)?.message,
             )
 
-            // 手势提示（亮度/音量/倍速反馈）
+            // 手势提示（亮度/音量/倍速反馈）；长按倍速时附带「当前进度 / 总进度」
             GestureTip(
                 state = gestureTipState.value,
+                positionMs = seekerState.value.currentTime,
+                durationMs = seekerState.value.totalDuration,
                 modifier = Modifier.align(Alignment.Center),
             )
 
-            // 相关视频
-            RelatedVideosController(
+            // 选集 / 相关视频整合页（左：分集栏，右：相关视频栏）
+            PlayerExploreController(
                 show = showRelatedVideosController,
+                currentCid = uiState.cid,
+                videoList = uiState.videoList,
                 relatedVideos = uiState.relatedVideos,
+                focusTarget = overlayFocus,
+                onUserInteraction = { startExploreAutoHide() },
+                onPlayNewVideo = { item ->
+                    onPlayNewVideo(item)
+                    // 选定分集即收起整页
+                    closeAllControllers()
+                },
                 onVideoClicked = onRelatedVideoClicked,
             )
 
@@ -546,6 +664,7 @@ fun VideoPlayerController(
             ControllerVideoInfo(
                 modifier = Modifier.focusable(),
                 show = showInfoSeekController,
+                isPlaying = uiState.playerState == PlayerState.Playing,
                 isSeeking = isSeeking,
                 goTime = goTime,
                 seekerState = seekerState.value,
@@ -557,6 +676,8 @@ fun VideoPlayerController(
                 isPgc = isPgc,
                 danmakuEnabled = uiState.danmakuState.enabledTypes.isNotEmpty(),
                 isLooping = isLooping,
+                hasNextEpisode = uiState.hasNextEpisode,
+                focusTarget = overlayFocus,
                 onDirectionLeft = ::onDirectionLeft,
                 onDirectionRight = ::onDirectionRight,
                 onSeekGoTime = ::onSeekGoTime,
@@ -565,12 +686,21 @@ fun VideoPlayerController(
                     onPlay()
                     startControllerAutoHide()
                 },
+                onPlayNext = {
+                    onPlayNext()
+                    startControllerAutoHide()
+                },
                 onDanmakuSwitchChange = {
                     onToggleDanmaku()
                     startControllerAutoHide()
                 },
                 onShowSettings = { showMenuController = true },
-                onShowRelatedVideos = { showRelatedVideosController = true },
+                onShowRelatedVideos = {
+                    // 同一个整合页，但焦点直接给右侧相关视频栏
+                    overlayFocus = PlayerOverlayFocus.Related
+                    showRelatedVideosController = true
+                    startExploreAutoHide()
+                },
                 onGoToVideoInfo = onGoToVideoDetail,
                 onToggleLoop = {
                     onToggleLoop()
@@ -579,17 +709,6 @@ fun VideoPlayerController(
                 onGoToUpPage = onGoToUpPage,
                 onShowInteraction = onShowInteraction,
                 onShowComments = onShowComments,
-            )
-
-            // 分集列表
-            VideoListController(
-                show = showListController,
-                currentCid = uiState.cid,
-                videoList = uiState.videoList,
-                onPlayNewVideo = { item ->
-                    onPlayNewVideo(item)
-                    showListController = false
-                },
             )
 
             // 设置菜单

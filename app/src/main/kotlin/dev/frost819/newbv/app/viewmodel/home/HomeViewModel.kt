@@ -299,6 +299,8 @@ class HomeViewModel
                 dev.frost819.newbv.data.datastore.HomeTopNavItem.Recommend -> refreshRecommend()
                 dev.frost819.newbv.data.datastore.HomeTopNavItem.Popular -> refreshPopular()
                 dev.frost819.newbv.data.datastore.HomeTopNavItem.Dynamics -> refreshDynamic()
+                // Bangumi 分类 Tab 的数据由各自的 BangumiViewModel 负责，此处不处理
+                else -> Unit
             }
         }
 
@@ -312,6 +314,8 @@ class HomeViewModel
                 dev.frost819.newbv.data.datastore.HomeTopNavItem.Recommend -> loadRecommend()
                 dev.frost819.newbv.data.datastore.HomeTopNavItem.Popular -> loadPopular()
                 dev.frost819.newbv.data.datastore.HomeTopNavItem.Dynamics -> loadDynamic()
+                // Bangumi 分类 Tab 的数据由各自的 BangumiViewModel 负责，此处不处理
+                else -> Unit
             }
         }
 

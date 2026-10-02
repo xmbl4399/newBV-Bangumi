@@ -29,7 +29,8 @@ import dev.frost819.newbv.core.theme.BVTheme
  * 播放状态提示覆盖层。
  *
  * 根据播放状态显示不同的提示：
- * - **暂停**：右下角显示暂停图标（仅当非播放、非缓冲、非错误时）
+ * - **暂停**：右下角显示暂停图标（仅当非播放、非缓冲、非错误时），
+ *   位置抬高到控制条上方，避免与进度条重叠
  * - **缓冲中**：屏幕中央显示加载指示器 + "缓冲中..."
  * - **错误**：屏幕中央显示错误信息
  *
@@ -55,7 +56,9 @@ fun PlayStateTips(
                 modifier =
                     Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(24.dp),
+                        // 原位置（end/bottom 各 24dp）会压在进度条与按钮行之间，观感很差；
+                        // 往左上挪到控件区上方，避开进度条
+                        .padding(end = 40.dp, bottom = 88.dp),
             )
         }
         if (isBuffering && !isError) {
@@ -76,6 +79,7 @@ fun PlayStateTips(
  * 暂停图标。
  *
  * 右下角显示的半透明暂停图标，提示用户当前处于暂停状态。
+ * 抬高到播放控件（进度条 + 按钮行）上方，避免遮住进度条。
  */
 @Composable
 fun PauseIcon(modifier: Modifier = Modifier) {

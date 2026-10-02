@@ -103,8 +103,8 @@ class PrefsTest {
     }
 
     @Test
-    fun `default danmakuScale is 1_75`() {
-        assertThat(Prefs.defaultDanmakuScale).isEqualTo(1.75f)
+    fun `default danmakuScale is 2_0`() {
+        assertThat(Prefs.defaultDanmakuScale).isEqualTo(2f)
     }
 
     @Test
@@ -113,8 +113,8 @@ class PrefsTest {
     }
 
     @Test
-    fun `default danmakuArea is 0_5`() {
-        assertThat(Prefs.defaultDanmakuArea).isEqualTo(0.5f)
+    fun `default danmakuArea is 0_25`() {
+        assertThat(Prefs.defaultDanmakuArea).isEqualTo(0.25f)
     }
 
     @Test
@@ -138,13 +138,13 @@ class PrefsTest {
     }
 
     @Test
-    fun `default showVideoInfo is true`() {
-        assertThat(Prefs.showVideoInfo).isTrue()
+    fun `default showVideoInfo is false`() {
+        assertThat(Prefs.showVideoInfo).isFalse()
     }
 
     @Test
-    fun `default showPersistentSeek is false`() {
-        assertThat(Prefs.showPersistentSeek).isFalse()
+    fun `default showPersistentSeek is true`() {
+        assertThat(Prefs.showPersistentSeek).isTrue()
     }
 
     @Test
@@ -158,8 +158,8 @@ class PrefsTest {
     }
 
     @Test
-    fun `default firstHomeTopNavItem is Dynamics`() {
-        assertThat(Prefs.firstHomeTopNavItem).isEqualTo(HomeTopNavItem.Dynamics)
+    fun `default firstHomeTopNavItem is Popular`() {
+        assertThat(Prefs.firstHomeTopNavItem).isEqualTo(HomeTopNavItem.Popular)
     }
 
     @Test
@@ -173,8 +173,46 @@ class PrefsTest {
     }
 
     @Test
+    fun `default hideNoScoreMedia is true`() {
+        // 与 blbl-Bangumi / PiliPlus-Bangumi 的默认值保持一致：默认就隐藏无评分条目
+        assertThat(Prefs.hideNoScoreMedia).isTrue()
+    }
+
+    @Test
+    fun `default bangumiApiBaseUrl is blank meaning official first`() {
+        assertThat(Prefs.bangumiApiBaseUrl).isEmpty()
+    }
+
+    @Test
     fun `default themeMode is FollowSystem`() {
         assertThat(Prefs.themeMode).isEqualTo(ThemeMode.FollowSystem)
+    }
+
+    @Test
+    fun `default videoGridColumns is 5`() {
+        assertThat(Prefs.videoGridColumns).isEqualTo(GridColumnCount.Five)
+    }
+
+    @Test
+    fun `default bangumiGridColumns is 7`() {
+        assertThat(Prefs.bangumiGridColumns).isEqualTo(GridColumnCount.Seven)
+    }
+
+    @Test
+    fun `grid columns round trip through the store`() {
+        Prefs.videoGridColumns = GridColumnCount.Eight
+        Prefs.bangumiGridColumns = GridColumnCount.Three
+
+        assertThat(Prefs.videoGridColumns).isEqualTo(GridColumnCount.Eight)
+        assertThat(Prefs.bangumiGridColumns).isEqualTo(GridColumnCount.Three)
+    }
+
+    @Test
+    fun `unknown stored column count falls back to the per setting default`() {
+        // 视频回退到 5、番剧回退到 7（两者的默认档不同）
+        assertThat(GridColumnCount.fromColumns(99)).isEqualTo(GridColumnCount.Five)
+        assertThat(GridColumnCount.fromColumns(99, GridColumnCount.DEFAULT_BANGUMI)).isEqualTo(GridColumnCount.Seven)
+        assertThat(GridColumnCount.fromColumns(6)).isEqualTo(GridColumnCount.Six)
     }
 
     @Test

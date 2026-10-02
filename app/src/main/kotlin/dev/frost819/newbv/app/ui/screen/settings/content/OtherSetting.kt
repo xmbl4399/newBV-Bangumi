@@ -26,13 +26,15 @@ import dev.frost819.newbv.app.ui.component.settings.OptionDialog
 import dev.frost819.newbv.app.ui.component.settings.SettingListItem
 import dev.frost819.newbv.app.ui.component.settings.displayName
 import dev.frost819.newbv.app.ui.screen.settings.SettingsMenuNavItem
+import dev.frost819.newbv.bangumiapi.entity.BangumiApiSource
 import dev.frost819.newbv.data.datastore.ApiType
 import dev.frost819.newbv.data.datastore.Prefs
 
 /**
  * 其他设置页。
  *
- * 接口选择/崩溃上报/查看日志。
+ * 接口选择/崩溃上报/查看日志，以及 Bangumi 相关开关
+ * （隐藏无评分条目、BGM 接口设置）。
  *
  * @param onNavigateToLogViewer 跳转日志查看页回调。
  */
@@ -47,6 +49,9 @@ fun OtherSetting(
     var showPreferedApiDialog by remember { mutableStateOf(false) }
     var selectedApi by remember { mutableStateOf(Prefs.apiType) }
     var crashReportEnabled by remember { mutableStateOf(Prefs.crashReportEnabled) }
+    var hideNoScoreEnabled by remember { mutableStateOf(Prefs.hideNoScoreMedia) }
+    var showBangumiApiDialog by remember { mutableStateOf(false) }
+    var selectedBangumiApi by remember { mutableStateOf(Prefs.bangumiApiBaseUrl) }
 
     Column(
         modifier =
@@ -67,6 +72,31 @@ fun OtherSetting(
             title = "接口选择",
             supportText = "当前：${selectedApi.displayName}",
             onClick = { showPreferedApiDialog = true },
+        )
+
+        SettingListItem(
+            title = "BGM 接口设置",
+            supportText = "当前：${BangumiApiSource.fromBaseUrl(selectedBangumiApi).displayName}" +
+                "（官方不通时自动切换备用源）",
+            onClick = { showBangumiApiDialog = true },
+        )
+
+        SettingListItem(
+            title = "隐藏无评分条目",
+            supportText = "Bangumi 分类页只保留已有评分的条目",
+            trailingContent = {
+                Switch(
+                    checked = hideNoScoreEnabled,
+                    onCheckedChange = {
+                        hideNoScoreEnabled = it
+                        Prefs.hideNoScoreMedia = it
+                    },
+                )
+            },
+            onClick = {
+                hideNoScoreEnabled = !hideNoScoreEnabled
+                Prefs.hideNoScoreMedia = hideNoScoreEnabled
+            },
         )
 
         SettingListItem(
@@ -111,6 +141,19 @@ fun OtherSetting(
             onSelect = {
                 Prefs.apiType = it
                 selectedApi = it
+            },
+            getDisplayName = { it.displayName },
+        )
+    }
+
+    if (showBangumiApiDialog) {
+        OptionDialog(
+            options = BangumiApiSource.entries.toTypedArray(),
+            selectedOption = BangumiApiSource.fromBaseUrl(selectedBangumiApi),
+            onDismiss = { showBangumiApiDialog = false },
+            onSelect = {
+                Prefs.bangumiApiBaseUrl = it.baseUrl
+                selectedBangumiApi = it.baseUrl
             },
             getDisplayName = { it.displayName },
         )

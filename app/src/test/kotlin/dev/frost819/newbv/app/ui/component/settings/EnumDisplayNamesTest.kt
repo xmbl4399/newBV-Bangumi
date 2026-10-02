@@ -1,9 +1,11 @@
 package dev.frost819.newbv.app.ui.component.settings
 
 import com.google.common.truth.Truth.assertThat
+import dev.frost819.newbv.bangumiapi.entity.BangumiApiSource
 import dev.frost819.newbv.data.datastore.ActionAfterPlay
 import dev.frost819.newbv.data.datastore.ApiType
 import dev.frost819.newbv.data.datastore.Audio
+import dev.frost819.newbv.data.datastore.GridColumnCount
 import dev.frost819.newbv.data.datastore.HomeTopNavItem
 import dev.frost819.newbv.data.datastore.PersonalTopNavItem
 import dev.frost819.newbv.data.datastore.PlaySpeed
@@ -116,6 +118,21 @@ class EnumDisplayNamesTest {
     }
 
     @Test
+    fun gridColumnCount_displayNames_allNonEmpty() {
+        GridColumnCount.entries.forEach { count ->
+            assertThat(count.displayName).isNotEmpty()
+        }
+    }
+
+    @Test
+    fun gridColumnCount_displayNames_knownValues() {
+        assertThat(GridColumnCount.Three.displayName).isEqualTo("3 列")
+        assertThat(GridColumnCount.Five.displayName).isEqualTo("5 列")
+        assertThat(GridColumnCount.Seven.displayName).isEqualTo("7 列")
+        assertThat(GridColumnCount.Eight.displayName).isEqualTo("8 列")
+    }
+
+    @Test
     fun homeTopNavItem_displayNames_allNonEmpty() {
         HomeTopNavItem.entries.forEach { item ->
             assertThat(item.displayName).isNotEmpty()
@@ -127,6 +144,14 @@ class EnumDisplayNamesTest {
         assertThat(HomeTopNavItem.Dynamics.displayName).isEqualTo("动态")
         assertThat(HomeTopNavItem.Recommend.displayName).isEqualTo("推荐")
         assertThat(HomeTopNavItem.Popular.displayName).isEqualTo("热门")
+        // Bangumi 分类 Tab，文案照搬 blbl-Bangumi
+        assertThat(HomeTopNavItem.TvAnime.displayName).isEqualTo("TV动画")
+        assertThat(HomeTopNavItem.AnimeMovie.displayName).isEqualTo("其他动画")
+        assertThat(HomeTopNavItem.JpDrama.displayName).isEqualTo("日剧")
+        assertThat(HomeTopNavItem.WesternDrama.displayName).isEqualTo("欧美剧")
+        assertThat(HomeTopNavItem.ChineseDrama.displayName).isEqualTo("华语剧")
+        assertThat(HomeTopNavItem.KoreanDrama.displayName).isEqualTo("韩剧")
+        assertThat(HomeTopNavItem.Movie.displayName).isEqualTo("电影")
     }
 
     @Test
@@ -142,5 +167,19 @@ class EnumDisplayNamesTest {
         assertThat(PersonalTopNavItem.History.displayName).isEqualTo("历史")
         assertThat(PersonalTopNavItem.Favorite.displayName).isEqualTo("收藏")
         assertThat(PersonalTopNavItem.FollowingSeason.displayName).isEqualTo("追番")
+    }
+
+    @Test
+    fun bangumiApiSource_displayNames_knownValues() {
+        assertThat(BangumiApiSource.Official.displayName).isEqualTo("官方 api.bgm.tv")
+        assertThat(BangumiApiSource.Retr0.displayName).isEqualTo("反代 bgm.retr0.xyz")
+        assertThat(BangumiApiSource.Anibt.displayName).isEqualTo("反代 bgmapi.anibt.net")
+    }
+
+    @Test
+    fun bangumiApiSource_displayNames_allNonEmpty() {
+        BangumiApiSource.entries.forEach { source ->
+            assertThat(source.displayName).isNotEmpty()
+        }
     }
 }

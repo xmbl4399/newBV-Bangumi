@@ -200,10 +200,56 @@ enum class PlaySpeed(
 // ===== 应用界面 =====
 
 /**
+ * 网格列数（每行卡片数）。
+ *
+ * 供「视频网格列数」与「番剧网格列数」两项界面设置共用。
+ * 通过 [columns] 持久化，未知值回退到调用方给的默认档
+ * （视频默认 [Five]、番剧默认 [Seven]，两者默认值不同，故不在此写死）。
+ *
+ * 上下界由枚举本身界定：少于 3 列在 TV 上每张卡过大、多于 8 列封面窄到看不清标题。
+ *
+ * @property columns 每行卡片（封面）数量。
+ */
+enum class GridColumnCount(
+    val columns: Int,
+) {
+    Three(3),
+    Four(4),
+    Five(5),
+    Six(6),
+    Seven(7),
+    Eight(8),
+    ;
+
+    companion object {
+        /** B 站视频网格的默认列数。 */
+        val DEFAULT_VIDEO: GridColumnCount = Five
+
+        /** 番剧（Bangumi）封面网格的默认列数。 */
+        val DEFAULT_BANGUMI: GridColumnCount = Seven
+
+        /**
+         * 从列数安全解析。
+         *
+         * @param columns 持久化的列数。
+         * @param fallback 未知值时的回退档。
+         * @return 对应枚举项。
+         */
+        fun fromColumns(
+            columns: Int,
+            fallback: GridColumnCount = DEFAULT_VIDEO,
+        ): GridColumnCount = entries.find { it.columns == columns } ?: fallback
+    }
+}
+
+/**
  * 左侧导航项（启动页）。
  *
  * 通过 ordinal 持久化，反序列化时越界回退到 [Home]。
- * 相对原版新增 [Live] 项（PRD 7.2）。
+ * 相对原版新增 [Live] 项（PRD 7.2）与 [Bangumi] 项（二改新增番剧浏览）。
+ *
+ * ⚠️ 新项**只能追加到末尾**：ordinal 是持久化键，插在中间会让老用户的
+ * "启动页"设置静默错位到相邻项。
  */
 enum class LeftNaviItem : java.io.Serializable {
     Search,
@@ -225,6 +271,9 @@ enum class LeftNaviItem : java.io.Serializable {
  *
  * 通过 [code] 持久化，反序列化时未知 code 回退到 [Dynamics]。
  *
+ * code 3~9 为 Bangumi 分类 Tab（顺序照搬 blbl-Bangumi 的首页 tab），
+ * 与 bangumi-api 模块的 `BangumiCategory` 一一对应，映射在 app 层 `HomeTabItem.kt`。
+ *
  * @property code Tab 标识。
  */
 enum class HomeTopNavItem(
@@ -233,6 +282,13 @@ enum class HomeTopNavItem(
     Dynamics(0),
     Recommend(1),
     Popular(2),
+    TvAnime(3),
+    AnimeMovie(4),
+    JpDrama(5),
+    WesternDrama(6),
+    ChineseDrama(7),
+    KoreanDrama(8),
+    Movie(9),
     ;
 
     companion object {
