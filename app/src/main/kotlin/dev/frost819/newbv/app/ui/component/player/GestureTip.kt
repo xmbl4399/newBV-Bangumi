@@ -34,13 +34,26 @@ private val TIP_CONTAINER = Color.Black.copy(alpha = 0.6f)
  * 提示圆形的边长。
  *
  * 用**固定正方形**而不是"内容自适应 + 圆形裁剪"：后者在"图标 + 数值"竖排时
- * 高度大于宽度，[CircleShape] 只能裁出椭圆。取 112dp 既容得下 32dp 图标 + 数值，
- * 也容得下 Seek 的「快进/快退」四字。
+ * 高度大于宽度，[CircleShape] 只能裁出椭圆。
+ *
+ * 取 84dp：原先 112dp 在 720P 档下占掉近 1/6 屏高，对「只是提示一下当前倍速」
+ * 这个用途来说过于抢眼。84dp 仍容得下 26dp 图标 + 数值竖排（内容高约 56dp），
+ * 也容得下 Seek 的「快进/快退」四字，且圆形轮廓不被撑成椭圆。
  */
-private val TIP_CIRCLE_SIZE = 112.dp
+private val TIP_CIRCLE_SIZE = 84.dp
+
+/** 提示图标尺寸（随圆圈一同收小）。 */
+private val TIP_ICON_SIZE = 26.dp
 
 /** 图标与数值之间的间距：取小值让两者靠紧，整体更接近正圆。 */
 private val TIP_ICON_TEXT_GAP = 2.dp
+
+/** 下方胶囊进度条的内边距（随圆圈一同收小）。 */
+private val TIP_CAPSULE_PADDING_H = 12.dp
+private val TIP_CAPSULE_PADDING_V = 4.dp
+
+/** 圆圈与下方胶囊之间的间距。 */
+private val TIP_CAPSULE_GAP = 6.dp
 
 /**
  * 手势提示覆盖层。
@@ -71,7 +84,7 @@ fun GestureTip(
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(TIP_CAPSULE_GAP),
         ) {
             val iconVector =
                 when (state.type) {
@@ -107,14 +120,14 @@ fun GestureTip(
                             imageVector = iconVector,
                             contentDescription = null,
                             tint = Color.White,
-                            modifier = Modifier.size(32.dp),
+                            modifier = Modifier.size(TIP_ICON_SIZE),
                         )
                     }
                     if (displayText.isNotEmpty()) {
                         Text(
                             text = displayText,
                             color = Color.White,
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.labelLarge,
                             maxLines = 1,
                         )
                     }
@@ -128,10 +141,13 @@ fun GestureTip(
                         Modifier
                             .clip(RoundedCornerShape(percent = 50))
                             .background(TIP_CONTAINER)
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                            .padding(
+                                horizontal = TIP_CAPSULE_PADDING_H,
+                                vertical = TIP_CAPSULE_PADDING_V,
+                            ),
                     text = "${positionMs.formatHourMinSec()} / ${durationMs.formatHourMinSec()}",
                     color = Color.White,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.labelLarge,
                     maxLines = 1,
                 )
             }
