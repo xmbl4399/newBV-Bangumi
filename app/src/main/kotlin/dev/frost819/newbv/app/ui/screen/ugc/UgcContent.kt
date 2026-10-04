@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import dev.frost819.newbv.app.ui.component.FocusSaver
+import dev.frost819.newbv.app.ui.component.GridSpacing
 import dev.frost819.newbv.app.ui.component.ListFooterTip
 import dev.frost819.newbv.app.ui.component.TopNav
 import dev.frost819.newbv.app.ui.component.TopNavItem
@@ -170,8 +171,8 @@ private fun UgcGrid(
     TvLazyVerticalGrid(
         state = gridState,
         columns = GridCells.Fixed(4),
-        contentPadding = PaddingValues(24.dp),
-        horizontalArrangement = Arrangement.spacedBy(24.dp),
+        contentPadding = PaddingValues(GridSpacing.contentPadding),
+        horizontalArrangement = Arrangement.spacedBy(GridSpacing.horizontal),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         itemsIndexed(

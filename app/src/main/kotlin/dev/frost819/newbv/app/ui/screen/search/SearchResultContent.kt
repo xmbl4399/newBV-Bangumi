@@ -47,6 +47,7 @@ import androidx.navigation.NavController
 import androidx.tv.material3.Icon
 import androidx.tv.material3.IconButton
 import androidx.tv.material3.Text
+import dev.frost819.newbv.app.ui.component.GridSpacing
 import dev.frost819.newbv.app.ui.component.ListFooterTip
 import dev.frost819.newbv.app.ui.component.TopNav
 import dev.frost819.newbv.app.ui.component.TopNavItem
@@ -76,9 +77,9 @@ import dev.frost819.newbv.app.viewmodel.search.SearchResultViewModel
 import dev.frost819.newbv.biliapi.repositories.SearchType
 import dev.frost819.newbv.core.focus.touchClickable
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.launch
 
 private val searchTypeLabels =
     mapOf(
@@ -271,9 +272,9 @@ fun SearchResultContent(
                         },
                 state = gridState,
                 columns = GridCells.Fixed(columnCount),
-                contentPadding = PaddingValues(24.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp),
-                horizontalArrangement = Arrangement.spacedBy(24.dp),
+                contentPadding = PaddingValues(GridSpacing.contentPadding),
+                verticalArrangement = Arrangement.spacedBy(GridSpacing.horizontal),
+                horizontalArrangement = Arrangement.spacedBy(GridSpacing.horizontal),
             ) {
                 items(activeResult.items, key = { item ->
                     when (item) {

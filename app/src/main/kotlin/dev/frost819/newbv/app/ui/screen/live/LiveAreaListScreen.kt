@@ -27,14 +27,15 @@ import androidx.navigation.toRoute
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.frost819.newbv.app.ui.component.GridSpacing
 import dev.frost819.newbv.app.ui.component.ListFooterTip
 import dev.frost819.newbv.app.ui.component.TvLazyVerticalGrid
 import dev.frost819.newbv.app.ui.component.focusSaverItem
-import dev.frost819.newbv.app.ui.component.rememberVideoGridColumns
 import dev.frost819.newbv.app.ui.component.livecard.LiveRoomCard
 import dev.frost819.newbv.app.ui.component.livecard.LiveRoomCardData
 import dev.frost819.newbv.app.ui.component.livecard.formatOnlineCount
 import dev.frost819.newbv.app.ui.component.rememberFocusSaver
+import dev.frost819.newbv.app.ui.component.rememberVideoGridColumns
 import dev.frost819.newbv.app.ui.navigation.LiveAreaRoute
 import dev.frost819.newbv.app.ui.navigation.LivePlayerRoute
 import dev.frost819.newbv.biliapi.http.entity.live.LiveRoomItem
@@ -194,8 +195,8 @@ private fun LiveAreaListScreen(
             modifier = Modifier.weight(1f),
             state = gridState,
             columns = GridCells.Fixed(rememberVideoGridColumns()),
-            contentPadding = PaddingValues(24.dp),
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            contentPadding = PaddingValues(GridSpacing.contentPadding),
+            horizontalArrangement = Arrangement.spacedBy(GridSpacing.horizontal),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             itemsIndexed(

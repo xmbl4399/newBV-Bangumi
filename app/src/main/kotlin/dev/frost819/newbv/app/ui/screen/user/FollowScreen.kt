@@ -39,6 +39,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil3.compose.AsyncImage
+import dev.frost819.newbv.app.ui.component.GridSpacing
 import dev.frost819.newbv.app.ui.component.TvLazyVerticalGrid
 import dev.frost819.newbv.app.ui.component.focusSaverItem
 import dev.frost819.newbv.app.ui.component.rememberFocusSaver
@@ -84,8 +85,8 @@ private fun FollowScreen(
     TvLazyVerticalGrid(
         state = gridState,
         columns = GridCells.Fixed(4),
-        contentPadding = PaddingValues(24.dp),
-        horizontalArrangement = Arrangement.spacedBy(24.dp),
+        contentPadding = PaddingValues(GridSpacing.contentPadding),
+        horizontalArrangement = Arrangement.spacedBy(GridSpacing.horizontal),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (state.loading && state.users.isEmpty()) {

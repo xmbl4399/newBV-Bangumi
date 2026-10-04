@@ -35,6 +35,7 @@ import androidx.navigation.NavController
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import dev.frost819.newbv.app.ui.component.FocusSaver
+import dev.frost819.newbv.app.ui.component.GridSpacing
 import dev.frost819.newbv.app.ui.component.ListFooterTip
 import dev.frost819.newbv.app.ui.component.TopNav
 import dev.frost819.newbv.app.ui.component.TopNavItem
@@ -66,7 +67,9 @@ private val MONTHS_DESCENDING: List<Int> = (12 downTo 1).toList()
  *
  * @property year 对应年份。
  */
-private data class BangumiYearTab(val year: Int) : TopNavItem {
+private data class BangumiYearTab(
+    val year: Int,
+) : TopNavItem {
     override val displayName: String = year.toString()
 }
 
@@ -190,8 +193,15 @@ private fun BangumiGrid(
     TvLazyVerticalGrid(
         state = gridState,
         columns = GridCells.Fixed(gridColumns),
-        // 顶部只留 12dp：年份栏自身已无下留白，再叠 24dp 会在两者之间拉出一条明显空档。
-        contentPadding = PaddingValues(start = 24.dp, top = 12.dp, end = 24.dp, bottom = 24.dp),
+        // 左右跟随网格留白口径；顶部只留 12dp：年份栏自身已无下留白，
+        // 再叠一份会在两者之间拉出一条明显空档。
+        contentPadding =
+            PaddingValues(
+                start = GridSpacing.contentPadding,
+                top = 12.dp,
+                end = GridSpacing.contentPadding,
+                bottom = 24.dp,
+            ),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {

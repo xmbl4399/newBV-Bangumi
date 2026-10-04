@@ -21,6 +21,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.tv.material3.Text
 import dev.frost819.newbv.app.ui.component.FocusSaver
+import dev.frost819.newbv.app.ui.component.GridSpacing
 import dev.frost819.newbv.app.ui.component.ListFooterTip
 import dev.frost819.newbv.app.ui.component.TvLazyVerticalGrid
 import dev.frost819.newbv.app.ui.component.focusSaverItem
@@ -88,8 +89,8 @@ fun DynamicsScreen(
         modifier = modifier,
         state = gridState,
         columns = GridCells.Fixed(rememberVideoGridColumns()),
-        contentPadding = PaddingValues(24.dp),
-        horizontalArrangement = Arrangement.spacedBy(24.dp),
+        contentPadding = PaddingValues(GridSpacing.contentPadding),
+        horizontalArrangement = Arrangement.spacedBy(GridSpacing.horizontal),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         itemsIndexed(
