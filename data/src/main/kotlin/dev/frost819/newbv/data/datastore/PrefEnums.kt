@@ -204,7 +204,7 @@ enum class PlaySpeed(
  *
  * 供「视频网格列数」与「番剧网格列数」两项界面设置共用。
  * 通过 [columns] 持久化，未知值回退到调用方给的默认档
- * （视频默认 [Five]、番剧默认 [Seven]，两者默认值不同，故不在此写死）。
+ * （视频默认 [Four]、番剧默认 [Five]，两者默认值不同，故不在此写死）。
  *
  * 上下界由枚举本身界定：少于 3 列在 TV 上每张卡过大、多于 8 列封面窄到看不清标题。
  *
@@ -223,10 +223,10 @@ enum class GridColumnCount(
 
     companion object {
         /** B 站视频网格的默认列数。 */
-        val DEFAULT_VIDEO: GridColumnCount = Five
+        val DEFAULT_VIDEO: GridColumnCount = Four
 
         /** 番剧（Bangumi）封面网格的默认列数。 */
-        val DEFAULT_BANGUMI: GridColumnCount = Seven
+        val DEFAULT_BANGUMI: GridColumnCount = Five
 
         /**
          * 从列数安全解析。

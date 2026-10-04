@@ -19,7 +19,6 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import dagger.hilt.android.AndroidEntryPoint
 import dev.frost819.newbv.app.ui.navigation.AppNavHost
-import dev.frost819.newbv.app.ui.navigation.HomeRoute
 import dev.frost819.newbv.core.interaction.InteractionTracker
 import dev.frost819.newbv.core.interaction.LocalInteractionTracker
 import dev.frost819.newbv.core.log.Loggers
@@ -84,7 +83,11 @@ class MainActivity : ComponentActivity() {
                                     .fillMaxSize()
                                     .windowInsetsPadding(WindowInsets.safeDrawing),
                         ) {
-                            AppNavHost(startDestination = HomeRoute)
+                            // 不显式传 startDestination：由 AppNavHost 按 Prefs.isOnboarded
+                            // 推导（未完成首次启动引导 → 模式选择页，否则直接主页）。
+                            // 曾在这里硬编码 HomeRoute，把默认值里的推导整个覆盖掉，
+                            // 导致引导页永远不出现。
+                            AppNavHost()
                         }
                     }
                 }

@@ -370,6 +370,15 @@ object Prefs {
     /** 界面缩放是否已按屏幕宽度自动初始化过（仅首次启动写一次，之后尊重用户手动设置）。 */
     var densityInitialized by pref(PrefKeys.densityInitialized, false)
 
+    /**
+     * 是否已完成首次启动引导（标清 / 高清模式选择）。
+     *
+     * **默认 false**：新安装首次启动时展示模式选择页，由用户选「标清 / 高清」后置 true。
+     * 老版本升级上来的用户没有这个键，也会在升级后首启看到一次 —— 视为一次模式确认，
+     * 不属回归（他会顺手把已生效的档位再确认一遍）。
+     */
+    var isOnboarded by pref(PrefKeys.isOnboarded, false)
+
     /** 启动页（左侧导航项）。 */
     var homeLeftNavItem by pref(
         PrefKeys.homeLeftNavItem,
@@ -406,7 +415,7 @@ object Prefs {
     )
 
     /**
-     * B 站视频网格列数（每行卡片数），**默认 5**。
+     * B 站视频网格列数（每行卡片数），**默认 4**。
      *
      * 作用于首页（推荐/热门/动态）、个人页（收藏/历史/稍后再看/追番）、
      * 直播、PGC 番剧等所有使用视频卡片网格的页面。
@@ -419,7 +428,7 @@ object Prefs {
     )
 
     /**
-     * 番剧（Bangumi）封面网格列数（每行封面数），**默认 7**。
+     * 番剧（Bangumi）封面网格列数（每行封面数），**默认 5**。
      *
      * 只作用于二改新增的 Bangumi 分类页（番剧封面卡片比视频卡片窄，列数独立设置）。
      */

@@ -75,6 +75,9 @@ internal object PrefKeys {
 
     /** 界面缩放是否已按屏幕宽度自动初始化过（仅首次启动写一次）。 */
     val densityInitialized = booleanPreferencesKey("density_initialized")
+
+    /** 首次启动引导（标清 / 高清模式选择）是否已完成。 */
+    val isOnboarded = booleanPreferencesKey("is_onboarded")
     val homeLeftNavItem = intPreferencesKey("home_left_nav")
     val firstHomeTopNavItem = intPreferencesKey("first_home_top_nav")
     val firstPersonalTopNavItem = intPreferencesKey("first_personal_top_nav")

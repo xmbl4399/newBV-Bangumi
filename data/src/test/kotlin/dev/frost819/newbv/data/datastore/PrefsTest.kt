@@ -189,13 +189,13 @@ class PrefsTest {
     }
 
     @Test
-    fun `default videoGridColumns is 5`() {
-        assertThat(Prefs.videoGridColumns).isEqualTo(GridColumnCount.Five)
+    fun `default videoGridColumns is 4`() {
+        assertThat(Prefs.videoGridColumns).isEqualTo(GridColumnCount.Four)
     }
 
     @Test
-    fun `default bangumiGridColumns is 7`() {
-        assertThat(Prefs.bangumiGridColumns).isEqualTo(GridColumnCount.Seven)
+    fun `default bangumiGridColumns is 5`() {
+        assertThat(Prefs.bangumiGridColumns).isEqualTo(GridColumnCount.Five)
     }
 
     @Test
@@ -209,10 +209,22 @@ class PrefsTest {
 
     @Test
     fun `unknown stored column count falls back to the per setting default`() {
-        // 视频回退到 5、番剧回退到 7（两者的默认档不同）
-        assertThat(GridColumnCount.fromColumns(99)).isEqualTo(GridColumnCount.Five)
-        assertThat(GridColumnCount.fromColumns(99, GridColumnCount.DEFAULT_BANGUMI)).isEqualTo(GridColumnCount.Seven)
+        // 视频回退到 4、番剧回退到 5（两者的默认档不同）
+        assertThat(GridColumnCount.fromColumns(99)).isEqualTo(GridColumnCount.Four)
+        assertThat(GridColumnCount.fromColumns(99, GridColumnCount.DEFAULT_BANGUMI)).isEqualTo(GridColumnCount.Five)
         assertThat(GridColumnCount.fromColumns(6)).isEqualTo(GridColumnCount.Six)
+    }
+
+    @Test
+    fun `default isOnboarded is false`() {
+        assertThat(Prefs.isOnboarded).isFalse()
+    }
+
+    @Test
+    fun `isOnboarded round trips through the store`() {
+        Prefs.isOnboarded = true
+
+        assertThat(Prefs.isOnboarded).isTrue()
     }
 
     @Test

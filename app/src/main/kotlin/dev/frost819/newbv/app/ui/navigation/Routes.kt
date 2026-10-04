@@ -15,6 +15,17 @@ import kotlinx.serialization.Serializable
 @Serializable
 object HomeRoute
 
+// ── 首次启动 ──────────────────────────────────────────────────────────
+
+/**
+ * 首次启动模式选择页（标清 / 高清）。
+ *
+ * 只在 `Prefs.isOnboarded == false` 时作为起始目的地，选择完成后被
+ * `popUpTo(inclusive)` 摘出回退栈，此后不再出现。
+ */
+@Serializable
+object OnboardingRoute
+
 // ── 视频详情 ──────────────────────────────────────────────────────────
 
 /** 视频详情页。 */
