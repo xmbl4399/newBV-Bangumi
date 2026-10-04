@@ -4,6 +4,7 @@ import android.app.Activity
 import android.media.AudioManager
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -15,7 +16,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.positionChanged
 import kotlin.math.abs
-import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * 手势状态，用于驱动 [GestureTip] 覆盖层显示。
@@ -133,22 +133,51 @@ fun Modifier.playerGestures(
             var totalDeltaY = 0f
             var isHorizontalDrag: Boolean? = null
             var isLeftHalf = startX < width / 2
+
+            /*
+             * 长按探测改为**事件驱动**（awaitLongPressOrCancellation），不再用
+             * 「500ms 内没有 pointer 事件就算长按」的定时器写法。
+             *
+             * 旧写法为什么导致 3× 快进失效：`withTimeoutOrNull(500)` 包住
+             * `awaitPointerEvent`，只有当指针事件**完全不来**时才会超时。
+             * 但手指按在屏幕上（哪怕自认为没动）仍会持续产生 move 事件，
+             * 每次都在 500ms 内返回 ⇒ 永不超时 ⇒ longPressTriggered 恒为 false
+             * ⇒ onLongPressStart() 永不触发。实测确认：长按右半屏无任何反应，
+             * 而单击唤出控件正常（说明事件通道本身是通的，只有长按分支不可达）。
+             *
+             * awaitLongPressOrCancellation 由 Compose 内部按真实超时判定，
+             * 并把「按住了但发生移动」识别为取消（返回 null），因此抖动手感也正确
+             * （拖拽/亮度/音量手势不会被误判成长按）。
+             */
+            val longPress =
+                awaitLongPressOrCancellation(pointerId = firstDown.id)
+
+            if (longPress != null) {
+                isLeftHalf = startX < width / 2
+                callbacks.onLongPressStart(isLeftHalf)
+
+                // 长按期间只等抬起：不再做位移判定，避免长按变成亮度/音量调节
+                while (true) {
+                    val upEvent = awaitPointerEvent(PointerEventPass.Initial)
+                    val upChange = upEvent.changes.firstOrNull { it.id == firstDown.id } ?: break
+                    if (!upChange.pressed) {
+                        upChange.consume()
+                        break
+                    }
+                    // 长按成立后，指针移动不再产生任何手势语义，但仍消费掉，
+                    // 防止事件穿透到下层视频手势
+                    upChange.consume()
+                }
+
+                callbacks.onLongPressEnd()
+                gestureTipState.value = GestureTipState(isActive = false)
+                return@awaitEachGesture
+            }
+
             var longPressTriggered = false
 
             while (true) {
-                // 超过长按阈值仍没有指针事件（手指按住不动）⇒ 判定为长按，之后继续等抬起
-                val event =
-                    withTimeoutOrNull(if (!isDragging && !longPressTriggered) LONG_PRESS_TIMEOUT_MS else Long.MAX_VALUE) {
-                        awaitPointerEvent(PointerEventPass.Main)
-                    }
-                if (event == null) {
-                    if (!isDragging && !longPressTriggered) {
-                        longPressTriggered = true
-                        callbacks.onLongPressStart(isLeftHalf)
-                    }
-                    continue
-                }
-
+                val event = awaitPointerEvent(PointerEventPass.Main)
                 val changes = event.changes
                 val change = changes.firstOrNull() ?: continue
 
@@ -157,10 +186,9 @@ fun Modifier.playerGestures(
                     // 如果事件已被子组件消费（如按钮点击），跳过手势处理
                     if (change.isConsumed) break
 
-                    if (longPressTriggered) {
-                        callbacks.onLongPressEnd()
-                        gestureTipState.value = GestureTipState(isActive = false)
-                    } else if (isDragging) {
+                    // 长按分支已在前面（awaitLongPressOrCancellation）单独处理并 return，
+                    // 走不到这里
+                    if (isDragging) {
                         if (isHorizontalDrag == true) {
                             callbacks.onSeekCommit()
                         }
@@ -187,9 +215,6 @@ fun Modifier.playerGestures(
 
                 // 如果事件已被子组件消费（如进度条拖拽），跳过移动处理
                 if (change.isConsumed) continue
-
-                // 长按期间忽略位移：避免长按后轻微抖动被当成亮度/音量拖拽
-                if (longPressTriggered) continue
 
                 // 手指移动中
                 if (change.positionChanged()) {
