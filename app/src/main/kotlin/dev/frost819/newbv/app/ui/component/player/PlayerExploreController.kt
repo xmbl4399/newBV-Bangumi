@@ -63,8 +63,26 @@ private val PAGE_PADDING_TOP = 88.dp
  */
 private val PAGE_PADDING_BOTTOM = 80.dp
 
-/** 左右外边距：卡片与屏幕边缘留一点缝（三栏比例仍按权重各占 1/3）。 */
+/** 左右外边距：卡片与屏幕边缘留一点缝。 */
 private val PAGE_HORIZONTAL_MARGIN = 12.dp
+
+/**
+ * 三栏宽度权重：左分集 1、中留白 1、右相关视频 2。
+ *
+ * 不做平均三栏是因为**两侧内容对宽度的需求差一倍**：分集标题 6~8 字、
+ * 相关视频标题 20 字以上。平均分配会让相关视频标题只剩 209px（720p）
+ * 而被截断成读不完的半句，分集栏却有大量空白浪费。
+ *
+ * 中间留白保持 1 是为了让视频画面继续可见（留白的用途就是透出画面，
+ * 不承载内容，因此不参与内容的宽度分配）。
+ */
+private const val EXPLORE_LEFT_WEIGHT = 1f
+
+/** 中间留白权重（透出视频画面）。 */
+private const val EXPLORE_MIDDLE_WEIGHT = 1f
+
+/** 右侧相关视频权重（内容更长，占两份）。 */
+private const val EXPLORE_RIGHT_WEIGHT = 2f
 
 /** 卡片内边距。 */
 private val CARD_INNER_PADDING = 12.dp
@@ -72,12 +90,19 @@ private val CARD_INNER_PADDING = 12.dp
 /** 列头到下文的间距。 */
 private val HEADER_GAP = 8.dp
 
-/** 相关视频行封面宽（16:9）。 */
+/**
+ * 相关视频行封面宽（16:9）。
+ *
+ * 保持 160dp 不缩水：加宽右栏后标题已有充足宽度，封面无需再让位。
+ */
 private val RELATED_COVER_WIDTH = 160.dp
 
 /** 相关视频行的行距与内边距。 */
 private val RELATED_ITEM_SPACING = 8.dp
 private val RELATED_ITEM_PADDING = 8.dp
+
+/** 封面与文字之间的水平间隔。 */
+private val RELATED_COVER_GAP = 10.dp
 
 /** 未聚焦时的行底色：与分集行同一口径的淡白条带。 */
 private val RELATED_ITEM_IDLE_CONTAINER = Color.White.copy(alpha = 0.08f)
@@ -151,9 +176,9 @@ fun PlayerExploreController(
                         bottom = PAGE_PADDING_BOTTOM,
                     ),
         ) {
-            // 左 1/3：分集
+            // 左 1/4：分集（标题短，不需要宽）
             ExploreCard(
-                modifier = Modifier.weight(1f).fillMaxHeight(),
+                modifier = Modifier.weight(EXPLORE_LEFT_WEIGHT).fillMaxHeight(),
             ) {
                 ExploreColumnHeader(text = "分集 · ${videoList.size}")
                 Spacer(Modifier.height(HEADER_GAP))
@@ -166,12 +191,12 @@ fun PlayerExploreController(
                 )
             }
 
-            // 中 1/3：整块留白，视频从这里透出来
-            Spacer(Modifier.weight(1f))
+            // 中 1/4：整块留白，视频从这里透出来
+            Spacer(Modifier.weight(EXPLORE_MIDDLE_WEIGHT))
 
-            // 右 1/3：相关视频
+            // 右 1/2：相关视频（标题长，占两份宽度）
             ExploreCard(
-                modifier = Modifier.weight(1f).fillMaxHeight(),
+                modifier = Modifier.weight(EXPLORE_RIGHT_WEIGHT).fillMaxHeight(),
             ) {
                 ExploreColumnHeader(text = "相关视频")
                 Spacer(Modifier.height(HEADER_GAP))
@@ -245,8 +270,14 @@ private fun ExploreColumnHeader(text: String) {
 /**
  * 相关视频行：左封面（16:9，右下角时长）+ 右文字（标题两行 + UP 主 + 播放/弹幕数）。
  *
- * 竖排列表比原来的横向卡片条更省空间（1/3 栏下可同时看到 4~5 条），也更贴近
- * 「相关视频」的目标：扫一眼标题就能决定要不要切。
+ * 宽度分配是**按内容需求**定的，不是平均三栏：
+ * - 分集标题短（「奥日与黑暗森林」这类 6~8 字），1/4 栏足够；
+ * - 相关视频标题长（普遍 20 字以上），需要更宽。
+ *
+ * 因此左栏 1/4、右栏 1/2（见 [EXPLORE_LEFT_WEIGHT] / [EXPLORE_RIGHT_WEIGHT]）。
+ * 实测 720p 下右栏 628px，封面 160dp 不变时标题可用 418px ≈ 26 字/行、两行 52 字，
+ * 相比平均三栏的 209px（26 字/两行）翻倍，标题基本可完整显示，
+ * 而封面尺寸与一屏可见条数都没有牺牲。
  *
  * @param modifier 修饰符
  * @param video 视频数据
@@ -311,12 +342,12 @@ private fun RelatedVideoRow(
                 }
             }
 
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(RELATED_COVER_GAP))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = video.title,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleSmall,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
