@@ -28,8 +28,8 @@ import dev.frost819.newbv.app.entity.player.VideoListItem
 import dev.frost819.newbv.core.focus.focusInvertedColors
 import dev.frost819.newbv.core.focus.touchClickable
 
-/** 行内文字的水平内边距。 */
-private val ITEM_HORIZONTAL_PADDING = 16.dp
+/** 行内文字的水平内边距（整合页测量左栏宽度时复用，故为 internal）。 */
+internal val ITEM_HORIZONTAL_PADDING = 16.dp
 
 /** 非当前集、未聚焦时的行底色（淡白条带）。 */
 private val ITEM_IDLE_CONTAINER = Color.White.copy(alpha = 0.08f)
@@ -125,14 +125,40 @@ private data class EpisodeRow(
  * 再多的集数也只有一个 lazy item，整份列表会在一次组合里全部构建出来。
  */
 private fun List<VideoListItem>.toEpisodeRows(): List<EpisodeRow> =
+    toEpisodeEntries().mapIndexed { index, entry ->
+        EpisodeRow(index = index, video = entry.video, cid = entry.cid, title = entry.title)
+    }
+
+/**
+ * 分集标题（多分 P 摊平后逐行的顺序），供整合页按内容测量左栏宽度。
+ *
+ * 与 [toEpisodeRows] 共用 [toEpisodeEntries]，保证「一行显示哪个标题」的口径唯一，
+ * 不会出现「量到的标题」与「实际渲染的标题」不一致。
+ */
+internal fun List<VideoListItem>.episodeTitles(): List<String> = toEpisodeEntries().map { it.title }
+
+/**
+ * 摊平后的单条分集（尚未编号）。
+ *
+ * @property video 所属视频项；点击时回传，内部会把 cid 换成该行的分 P
+ * @property cid 该行 CID
+ * @property title 行标题
+ */
+private data class EpisodeEntry(
+    val video: VideoListItem,
+    val cid: Long,
+    val title: String,
+)
+
+private fun List<VideoListItem>.toEpisodeEntries(): List<EpisodeEntry> =
     buildList {
-        this@toEpisodeRows.forEach { item ->
+        this@toEpisodeEntries.forEach { item ->
             val pages = item.ugcPages.orEmpty()
             if (pages.isEmpty()) {
-                add(EpisodeRow(index = size, video = item, cid = item.cid, title = item.title))
+                add(EpisodeEntry(video = item, cid = item.cid, title = item.title))
             } else {
                 pages.forEach { page ->
-                    add(EpisodeRow(index = size, video = item, cid = page.cid, title = page.title))
+                    add(EpisodeEntry(video = item, cid = page.cid, title = page.title))
                 }
             }
         }

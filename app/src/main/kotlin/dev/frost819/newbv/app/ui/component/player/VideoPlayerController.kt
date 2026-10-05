@@ -696,10 +696,19 @@ fun VideoPlayerController(
                 },
                 onShowSettings = { showMenuController = true },
                 onShowRelatedVideos = {
-                    // 同一个整合页，但焦点直接给右侧相关视频栏
-                    overlayFocus = PlayerOverlayFocus.Related
-                    showRelatedVideosController = true
-                    startExploreAutoHide()
+                    if (showRelatedVideosController) {
+                        // 再点一次同一个按钮 = 只收起整合页，**底部播放控件留着**：
+                        // 按钮就在控件栏上，顺手把整条控件也关掉会连带把用户刚点的按钮一起消失
+                        hideExploreCountdown?.cancel()
+                        showRelatedVideosController = false
+                        overlayFocus = PlayerOverlayFocus.None
+                        startControllerAutoHide()
+                    } else {
+                        // 同一个整合页，但焦点直接给右侧相关视频栏
+                        overlayFocus = PlayerOverlayFocus.Related
+                        showRelatedVideosController = true
+                        startExploreAutoHide()
+                    }
                 },
                 onGoToVideoInfo = onGoToVideoDetail,
                 onToggleLoop = {

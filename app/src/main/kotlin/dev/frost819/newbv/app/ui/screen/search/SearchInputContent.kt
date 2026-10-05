@@ -43,12 +43,27 @@ import androidx.tv.material3.IconButton
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import dev.frost819.newbv.app.ui.component.FocusSaver
+import dev.frost819.newbv.app.ui.component.GridSpacing
 import dev.frost819.newbv.app.ui.component.focusSaverItem
 import dev.frost819.newbv.app.ui.component.search.SearchKeyword
 import dev.frost819.newbv.app.ui.component.search.SoftKeyboard
 import dev.frost819.newbv.app.viewmodel.search.SearchInputViewModel
 import dev.frost819.newbv.core.focus.touchClickable
 import dev.frost819.newbv.data.datastore.Prefs
+
+/** 三列之间的水平间距：软键盘列较宽，20dp 会把两列文字拉开得太散，收到 12dp。 */
+private val ColumnSpacing = 12.dp
+
+/**
+ * 第一列（搜索框 + 软键盘）的列宽，同时作为搜索框与软键盘的宽度。
+ *
+ * 取值必须等于 [SoftKeyboard] 的排版宽度：6 列键 × 38dp + 5 个键间距 × 6dp = 258dp。
+ * 两者等宽可保证软键盘完整显示、不被裁切，搜索框与键盘也严格左对齐。
+ */
+private val SearchColumnWidth = 258.dp
+
+/** 内容区与左侧导航栏之间的间距：贴边会让搜索框显得拥挤，留一小段呼吸空间。 */
+private val ContentStartPadding = 12.dp
 
 /**
  * 搜索输入页内容。
@@ -74,9 +89,13 @@ fun SearchInputContent(
         modifier =
             modifier
                 .fillMaxSize()
-                .padding(start = 24.dp, top = 24.dp, end = 24.dp)
+                .padding(
+                    start = ContentStartPadding,
+                    top = 24.dp,
+                    end = GridSpacing.contentPadding,
+                )
                 .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(20.dp),
+        horizontalArrangement = Arrangement.spacedBy(ColumnSpacing),
     ) {
         // 列 1：搜索框 + 软键盘
         SearchInputColumn(
@@ -124,17 +143,17 @@ private fun SearchInputColumn(
     androidx.compose.foundation.layout.Box(
         modifier =
             Modifier
-                .width(280.dp)
+                .width(SearchColumnWidth)
                 .fillMaxHeight()
                 .focusGroup(),
-        contentAlignment = Alignment.TopCenter,
+        contentAlignment = Alignment.TopStart,
     ) {
         Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
+            horizontalAlignment = Alignment.Start,
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             OutlinedTextField(
-                modifier = Modifier.width(258.dp),
+                modifier = Modifier.width(SearchColumnWidth),
                 value = keyword,
                 onValueChange = onKeywordChange,
                 maxLines = 1,

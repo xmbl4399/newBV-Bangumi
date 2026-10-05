@@ -4,7 +4,6 @@ import android.app.Activity
 import android.media.AudioManager
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -15,6 +14,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.positionChanged
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
 
 /**
@@ -135,59 +135,69 @@ fun Modifier.playerGestures(
             var isLeftHalf = startX < width / 2
 
             /*
-             * 长按探测改为**事件驱动**（awaitLongPressOrCancellation），不再用
-             * 「500ms 内没有 pointer 事件就算长按」的定时器写法。
+             * 长按 / 拖拽 / 单击三条分支**合并进同一个事件循环**，只从
+             * `awaitPointerEvent` 一个出口取事件。
              *
-             * 旧写法为什么导致 3× 快进失效：`withTimeoutOrNull(500)` 包住
-             * `awaitPointerEvent`，只有当指针事件**完全不来**时才会超时。
-             * 但手指按在屏幕上（哪怕自认为没动）仍会持续产生 move 事件，
-             * 每次都在 500ms 内返回 ⇒ 永不超时 ⇒ longPressTriggered 恒为 false
-             * ⇒ onLongPressStart() 永不触发。实测确认：长按右半屏无任何反应，
-             * 而单击唤出控件正常（说明事件通道本身是通的，只有长按分支不可达）。
+             * 为什么不能像之前那样先用 awaitLongPressOrCancellation 单独判长按：
+             * 该 API 内部同样靠「等抬起 or 超时」工作，快速点击时它会把那一次
+             * **抬起事件从当前手势作用域取走**再返回 null；等它返回后，下面的
+             * while 循环再也拿不到这次抬起 ⇒ onSingleTap() 不触发 ⇒ 第一次点击
+             * 被整个吞掉，必须点第二次才能唤出控件（同时双击暂停也跟着失灵）。
              *
-             * awaitLongPressOrCancellation 由 Compose 内部按真实超时判定，
-             * 并把「按住了但发生移动」识别为取消（返回 null），因此抖动手感也正确
-             * （拖拽/亮度/音量手势不会被误判成长按）。
+             * 合并后：每次等待都带剩余超时（remaining）——
+             * - 静止不动：事件不来，withTimeoutOrNull 到点返回 null ⇒ 长按成立；
+             * - 移动：事件按时到达 ⇒ 派发 seek / 亮度 / 音量，并重置长按窗口；
+             * - 抬起：拿到抬起事件本身 ⇒ 按位移判单击 / 双击。
              */
-            val longPress =
-                awaitLongPressOrCancellation(pointerId = firstDown.id)
-
-            if (longPress != null) {
-                isLeftHalf = startX < width / 2
-                callbacks.onLongPressStart(isLeftHalf)
-
-                // 长按期间只等抬起：不再做位移判定，避免长按变成亮度/音量调节
-                while (true) {
-                    val upEvent = awaitPointerEvent(PointerEventPass.Initial)
-                    val upChange = upEvent.changes.firstOrNull { it.id == firstDown.id } ?: break
-                    if (!upChange.pressed) {
-                        upChange.consume()
-                        break
-                    }
-                    // 长按成立后，指针移动不再产生任何手势语义，但仍消费掉，
-                    // 防止事件穿透到下层视频手势
-                    upChange.consume()
-                }
-
-                callbacks.onLongPressEnd()
-                gestureTipState.value = GestureTipState(isActive = false)
-                return@awaitEachGesture
-            }
-
-            var longPressTriggered = false
+            var longPressDeadline = startTime + LONG_PRESS_TIMEOUT_MS
 
             while (true) {
-                val event = awaitPointerEvent(PointerEventPass.Main)
+                // 一旦产生拖拽语义就不再等长按超时（否则「拖完按住不动」会被误判成长按，
+                // 且 remaining 归零会让 withTimeoutOrNull(0) 立即返回 → 空转）
+                val event =
+                    if (isDragging) {
+                        awaitPointerEvent(PointerEventPass.Main)
+                    } else {
+                        val remaining =
+                            (longPressDeadline - System.currentTimeMillis()).coerceAtLeast(0L)
+                        withTimeoutOrNull(remaining) {
+                            awaitPointerEvent(PointerEventPass.Main)
+                        }
+                    }
+
+                // 超时（仅非拖拽时可能发生）⇒ 长按成立
+                if (event == null) {
+                    isLeftHalf = startX < width / 2
+                    callbacks.onLongPressStart(isLeftHalf)
+
+                    // 长按期间只等抬起：不再做位移判定，避免长按变成亮度/音量调节
+                    while (true) {
+                        val upChange =
+                            awaitPointerEvent(PointerEventPass.Initial)
+                                .changes
+                                .firstOrNull { it.id == firstDown.id } ?: break
+                        if (!upChange.pressed) {
+                            upChange.consume()
+                            break
+                        }
+                        // 长按成立后，指针移动不再产生任何手势语义，但仍消费掉，
+                        // 防止事件穿透到下层视频手势
+                        upChange.consume()
+                    }
+
+                    callbacks.onLongPressEnd()
+                    gestureTipState.value = GestureTipState(isActive = false)
+                    return@awaitEachGesture
+                }
+
                 val changes = event.changes
-                val change = changes.firstOrNull() ?: continue
+                val change = changes.firstOrNull { it.id == firstDown.id } ?: continue
 
                 if (!change.pressed) {
                     // 手指抬起
                     // 如果事件已被子组件消费（如按钮点击），跳过手势处理
                     if (change.isConsumed) break
 
-                    // 长按分支已在前面（awaitLongPressOrCancellation）单独处理并 return，
-                    // 走不到这里
                     if (isDragging) {
                         if (isHorizontalDrag == true) {
                             callbacks.onSeekCommit()
@@ -230,6 +240,11 @@ fun Modifier.playerGestures(
                     if (isHorizontalDrag == null && (absX > dragThreshold || absY > dragThreshold)) {
                         isHorizontalDrag = absX > absY
                         isDragging = true
+                    }
+
+                    // 拖拽开始后长按窗口作废（见上方 event 取用的分支说明）
+                    if (isDragging) {
+                        longPressDeadline = Long.MAX_VALUE
                     }
 
                     if (isHorizontalDrag == true) {
@@ -309,7 +324,9 @@ const val VOLUME_GESTURE_STEP_PX = 80f
  *
  * @param stepPx 一步对应的位移量（同正负号体系）
  */
-class GestureStepAccumulator(private val stepPx: Float) {
+class GestureStepAccumulator(
+    private val stepPx: Float,
+) {
     private var pending = 0f
 
     /**

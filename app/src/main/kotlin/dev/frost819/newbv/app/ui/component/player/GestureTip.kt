@@ -64,6 +64,10 @@ private val TIP_CAPSULE_GAP = 6.dp
  * 版式：**圆形**内只有图标与数值（两者靠紧，保证是正圆）；长按倍速的
  * 「当前进度 / 总进度」放在圆形下方，用**同透明度的胶囊底**承托。
  *
+ * **长按倍速例外**：此时画面本身已在快速翻滚，再压一个圆形提示（图标 + 「3.0x」）
+ * 只会遮挡画面，故倍速期间**只保留下方胶囊进度**，不显示圆形层（见 [speedProgressOnly]）。
+ * 亮度 / 音量 / seek 仍用圆形提示。
+ *
  * @param state 手势提示状态。
  * @param modifier 修饰符。
  * @param positionMs 当前播放进度（毫秒），负值表示未知；仅长按倍速时展示。
@@ -103,38 +107,43 @@ fun GestureTip(
                     GestureTipType.None -> ""
                 }
 
-            Box(
-                modifier =
-                    Modifier
-                        .size(TIP_CIRCLE_SIZE)
-                        .clip(CircleShape)
-                        .background(TIP_CONTAINER),
-                contentAlignment = Alignment.Center,
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(TIP_ICON_TEXT_GAP),
+            // 长按倍速且进度已知时，圆形层整个省掉：只留下方胶囊
+            val speedProgressOnly = state.type == GestureTipType.Speed && positionMs >= 0L && durationMs > 0L
+
+            if (!speedProgressOnly) {
+                Box(
+                    modifier =
+                        Modifier
+                            .size(TIP_CIRCLE_SIZE)
+                            .clip(CircleShape)
+                            .background(TIP_CONTAINER),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    if (iconVector != null) {
-                        Icon(
-                            imageVector = iconVector,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(TIP_ICON_SIZE),
-                        )
-                    }
-                    if (displayText.isNotEmpty()) {
-                        Text(
-                            text = displayText,
-                            color = Color.White,
-                            style = MaterialTheme.typography.labelLarge,
-                            maxLines = 1,
-                        )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(TIP_ICON_TEXT_GAP),
+                    ) {
+                        if (iconVector != null) {
+                            Icon(
+                                imageVector = iconVector,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(TIP_ICON_SIZE),
+                            )
+                        }
+                        if (displayText.isNotEmpty()) {
+                            Text(
+                                text = displayText,
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelLarge,
+                                maxLines = 1,
+                            )
+                        }
                     }
                 }
             }
 
-            // 进度时间：圆形下方，胶囊底（与圆形同透明度），随播放实时刷新
+            // 进度时间：胶囊底（与圆形同透明度），随播放实时刷新
             if (state.type == GestureTipType.Speed && positionMs >= 0L && durationMs > 0L) {
                 Text(
                     modifier =

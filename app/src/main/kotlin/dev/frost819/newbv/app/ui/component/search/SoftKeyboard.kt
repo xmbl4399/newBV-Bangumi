@@ -20,6 +20,15 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import dev.frost819.newbv.core.focus.touchClickable
 
+/** 键间距。 */
+private val KeyboardSpacing = 6.dp
+
+/** 键体宽度。 */
+private val KeySize = 38.dp
+
+/** 键盘内容宽度：6 列固定排版，6×38dp + 5×6dp = 258dp。 */
+private val KeyboardWidth = KeySize * 6 + KeyboardSpacing * 5
+
 private val keyboardKeys =
     listOf(
         listOf("A", "B", "C", "D", "E", "F"),
@@ -54,12 +63,12 @@ fun SoftKeyboard(
     onSearch: () -> Unit,
 ) {
     Column(
-        modifier = modifier.width(258.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = modifier.width(KeyboardWidth),
+        verticalArrangement = Arrangement.spacedBy(KeyboardSpacing),
     ) {
         keyboardKeys.forEachIndexed { rowIndex, rowKeys ->
             Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(KeyboardSpacing),
             ) {
                 rowKeys.forEachIndexed { index, key ->
                     val keyModifier =
@@ -77,7 +86,7 @@ fun SoftKeyboard(
             }
         }
         Row(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(KeyboardSpacing),
         ) {
             SoftKeyboardButton(
                 modifier = Modifier.weight(1f),
@@ -117,7 +126,7 @@ private fun SoftKeyboardKey(
             ),
     ) {
         Box(
-            modifier = Modifier.size(38.dp),
+            modifier = Modifier.size(KeySize),
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -135,7 +144,7 @@ private fun SoftKeyboardButton(
     onClick: () -> Unit,
 ) {
     Surface(
-        modifier = modifier.height(38.dp).touchClickable(onClick = onClick),
+        modifier = modifier.height(KeySize).touchClickable(onClick = onClick),
         onClick = onClick,
         colors =
             ClickableSurfaceDefaults.colors(
