@@ -148,6 +148,9 @@ fun VideoPlayerController(
     // 长按上键关闭整合页后，屏蔽上键的时长（毫秒）；期间的上键事件一律吞掉
     val upKeySuppressMs = 3000L
     var upKeySuppressUntil by remember { mutableStateOf(0L) }
+    // 长按下键收起底部播放控件后同理会留下 repeat 事件，若不放行会被下面的"唤出控件"
+    // 分支立刻又弹回来，故同样开一个屏蔽窗口
+    var downKeySuppressUntil by remember { mutableStateOf(0L) }
     // 音量手势跨事件累积位移：慢速拖动单事件位移不足一档，逐事件取整会被整段吞掉
     val volumeStepAccumulator = remember { GestureStepAccumulator(VOLUME_GESTURE_STEP_PX) }
 
@@ -184,7 +187,22 @@ fun VideoPlayerController(
                 onGoTime(goTime)
                 if (uiState.playerState != PlayerState.Playing) onPlay()
                 isSeeking = false
-                showInfoSeekController = false
+                // 这里**不**收播放控件：长按方向键连续 seek 时，每次 seek 都把控件收掉，
+                // 会让紧随其后的下一次按键变成「重新唤出控件」，而重新唤出会按
+                // overlayFocus 重新定位焦点（曾被下键写成 ControlBar），焦点于是被丢到
+                // 按钮行，右键随即从 seek 变成在按钮之间移焦点——用户看到的就是
+                // 「焦点在按钮间乱跳 + 进度条也被拉」。改成交给控件自己的 5s 无操作
+                // 计时：连续 seek 每次顺延，停手 5s 后自动收起。
+                // （此处不能直接调 startControllerAutoHide：它在文件中定义在本函数之后，
+                // Kotlin 局部函数必须先声明后使用，故按下述同义逻辑就地实现。）
+                if (showInfoSeekController && !showRelatedVideosController) {
+                    hideInfoSeekCountdown?.cancel()
+                    hideInfoSeekCountdown =
+                        scope.launch {
+                            delay(5000)
+                            showInfoSeekController = false
+                        }
+                }
             }
     }
 
@@ -237,6 +255,21 @@ fun VideoPlayerController(
         showMenuController = false
         showInfoSeekController = false
         showRelatedVideosController = false
+    }
+
+    /**
+     * 只收起整合页，**保留底部播放控件**。
+     *
+     * 与 [closeAllControllers] 的区别只是不关控件栏：整合页的关闭动作（按钮再点一次、
+     * 选完分集、选完相关视频）都不该连带把用户正在看的控件栏一起收掉，
+     * 控件栏自己的 5s 自动收起计时接管后续。
+     */
+    fun hideExploreController() {
+        hideExploreCountdown?.cancel()
+        showRelatedVideosController = false
+        overlayFocus = PlayerOverlayFocus.None
+        showInfoSeekController = true
+        startControllerAutoHide()
     }
 
     /**
@@ -404,8 +437,23 @@ fun VideoPlayerController(
                     }
                     return false
                 }
-                // 否则打开整合页（控件可见时也实时响应）：先把播放控件收起，
-                // 免得它与页面抢焦点；焦点交给左侧分集栏的当前集
+                if (showMenuController) {
+                    // 设置菜单打开时，上键必须放行给菜单自己的焦点系统（在菜单项之间上移）。
+                    // 本分支在 always-active 的 when 里，没有 showClickableControllers 门禁，
+                    // 若不在菜单上单独拦一层，上键会继续走到下面的"开整合页"分支，
+                    // 把整合页叠在菜单上（用户报告的叠加 bug）。
+                    return false
+                }
+                if (showInfoSeekController) {
+                    // 底部播放控件可见时，上键只做**控件内的焦点切换**（按钮行 → 进度条），
+                    // 不再唤出整合页：此时用户面对的是播放控件，想要的是换焦点而不是翻页。
+                    // 具体切换由 ControllerVideoInfo 里进度条/按钮行的 onKeyEvent 完成——
+                    // 注意本函数挂在根节点的 onPreviewKeyEvent 上，**先于子节点执行**，
+                    // 一旦在这里 return true 就永远轮不到子节点，所以必须 return false 放行。
+                    return false
+                }
+                // 否则打开整合页：先把播放控件收起，免得它与页面抢焦点；
+                // 焦点交给左侧分集栏的当前集
                 hideInfoSeekCountdown?.cancel()
                 showInfoSeekController = false
                 overlayFocus = PlayerOverlayFocus.EpisodeList
@@ -413,9 +461,38 @@ fun VideoPlayerController(
                 startExploreAutoHide()
                 return true
             }
+
+            Key.DirectionDown -> {
+                // 底部播放控件可见时，**长按**下键收起控件；短按放行给子节点，
+                // 焦点在控件内下移（进度条 → 按钮行，由 ControllerVideoInfo 的 onKeyEvent 处理）。
+                // 控件不可见时**不在这里处理**，落到下面原有的"唤出控件"分支。
+                val now = System.currentTimeMillis()
+                // 屏蔽窗口必须放在**最外层**：长按收起控件的瞬间 showInfoSeekController 已变 false，
+                // 若把窗口检查写在下面那个 if 里面，紧随的 repeat 事件就不再匹配该 if，
+                // 直接掉到文件末尾的"唤出控件"分支把控件又弹回来（长按看起来完全没生效）。
+                if (now < downKeySuppressUntil) {
+                    if (event.nativeKeyEvent.repeatCount > 0) {
+                        downKeySuppressUntil = now + upKeySuppressMs
+                    }
+                    return true
+                }
+                if (showInfoSeekController && !showRelatedVideosController && !showMenuController) {
+                    if (event.nativeKeyEvent.isLongPress || event.nativeKeyEvent.repeatCount > 0) {
+                        hideInfoSeekCountdown?.cancel()
+                        showInfoSeekController = false
+                        overlayFocus = PlayerOverlayFocus.None
+                        downKeySuppressUntil = now + upKeySuppressMs
+                        return true
+                    }
+                    return false
+                }
+            }
         }
 
         // 覆盖层未打开时的按键（KeyUp 已被顶层过滤，此处均为 KeyDown）
+        // 注意：upKeySuppressUntil / downKeySuppressUntil 的屏蔽窗口还要在下面用一次，
+        // 因为它们记录的是「刚刚用长按关掉了某个覆盖层」，紧接着的 repeat 事件必须继续吞，
+        // 否则会在同一分支里把刚关掉的东西又弹回来。
         if (!showClickableControllers) {
             when (event.key) {
                 in confirmKeys -> {
@@ -447,12 +524,18 @@ fun VideoPlayerController(
                         onCancelSkipToNextEp()
                         return true
                     }
+                    // 由 seek 键唤出的控件：焦点必须落回进度条。
+                    // 控件重新组合时 LaunchedEffect(focusTarget) 会按 overlayFocus 定位，
+                    // 若这里留着上一次下键写入的 ControlBar，焦点会被丢到按钮行，
+                    // 于是紧接着的方向键变成在按钮之间移焦点——用户看到的「焦点乱跳」。
+                    overlayFocus = PlayerOverlayFocus.None
                     showInfoSeekController = true
                     onDirectionLeft()
                     return true
                 }
 
                 Key.DirectionRight, Key.MediaFastForward -> {
+                    overlayFocus = PlayerOverlayFocus.None
                     showInfoSeekController = true
                     onDirectionRight()
                     return true
@@ -654,10 +737,14 @@ fun VideoPlayerController(
                 onUserInteraction = { startExploreAutoHide() },
                 onPlayNewVideo = { item ->
                     onPlayNewVideo(item)
-                    // 选定分集即收起整页
-                    closeAllControllers()
+                    // 选定分集即收起整页（保留底部控件）
+                    hideExploreController()
                 },
-                onVideoClicked = onRelatedVideoClicked,
+                onVideoClicked = { video ->
+                    onRelatedVideoClicked(video)
+                    // 选了新视频即收起整页：换的是正在播的内容，留在这一页没有意义
+                    hideExploreController()
+                },
             )
 
             // 信息栏 + 进度条 + 按钮

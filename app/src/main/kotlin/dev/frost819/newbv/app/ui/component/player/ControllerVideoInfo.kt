@@ -449,6 +449,14 @@ fun ControllerVideoInfoBottom(
                                 true
                             }
 
+                            Key.DirectionUp -> {
+                                // 进度条已经是播放控件里最上面的一行：上键就地消费，
+                                // 不再交给焦点系统上移（否则焦点会逃出播放控件），
+                                // 也不唤出整合页（那由根节点在控件不可见时才做）。
+                                if (it.type == KeyEventType.KeyUp) return@onKeyEvent true
+                                true
+                            }
+
                             Key.DirectionDown -> {
                                 if (it.type == KeyEventType.KeyUp) return@onKeyEvent true
                                 buttonsFocusRequester.requestFocus()
@@ -530,6 +538,11 @@ fun ControllerVideoInfoBottom(
                         if (it.key == Key.DirectionUp) {
                             if (it.type == KeyEventType.KeyUp) return@onKeyEvent true
                             seekFocusRequester.requestFocus()
+                            return@onKeyEvent true
+                        }
+                        if (it.key == Key.DirectionDown) {
+                            // 按钮行已经是播放控件里最下面的一行：下键就地消费，
+                            // 免得焦点下移逃出播放控件。收起控件请长按下键。
                             return@onKeyEvent true
                         }
                         false
