@@ -35,8 +35,8 @@ import dev.frost819.newbv.biliapi.repositories.VideoPlayRepository
 import dev.frost819.newbv.core.interaction.InteractionTracker
 import dev.frost819.newbv.core.log.CrashHandler
 import dev.frost819.newbv.core.log.CrashUploader
-import dev.frost819.newbv.data.db.dao.UserDao
 import dev.frost819.newbv.data.datastore.Prefs
+import dev.frost819.newbv.data.db.dao.UserDao
 import dev.frost819.newbv.data.repository.AccountRepository
 import dev.frost819.newbv.data.repository.SearchHistoryRepository
 import dev.frost819.newbv.data.repository.SearchHistoryRepositoryImpl

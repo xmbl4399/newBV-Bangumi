@@ -76,8 +76,9 @@ fun OtherSetting(
 
         SettingListItem(
             title = "BGM 接口设置",
-            supportText = "当前：${BangumiApiSource.fromBaseUrl(selectedBangumiApi).displayName}" +
-                "（官方不通时自动切换备用源）",
+            supportText =
+                "当前：${BangumiApiSource.fromBaseUrl(selectedBangumiApi).displayName}" +
+                    "（官方不通时自动切换备用源）",
             onClick = { showBangumiApiDialog = true },
         )
 

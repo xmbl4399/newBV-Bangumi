@@ -221,8 +221,7 @@ class BangumiHttpApiTest {
     private fun apiWithPreferred(
         preferred: String,
         onRequest: (HttpRequestData) -> Unit = {},
-    ): BangumiHttpApi =
-        apiWithHandler(preferred, onRequest) { respondJson(monthResponseJson, HttpStatusCode.OK) }
+    ): BangumiHttpApi = apiWithHandler(preferred, onRequest) { respondJson(monthResponseJson, HttpStatusCode.OK) }
 
     /** 用给定的首选地址 + 自定义响应逻辑构造 API。 */
     private fun apiWithHandler(

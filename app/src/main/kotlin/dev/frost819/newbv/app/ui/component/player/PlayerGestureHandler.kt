@@ -57,6 +57,7 @@ const val LONG_PRESS_TIMEOUT_MS = 500L
  * @param onVolumeChange 音量变化：deltaY > 0 增加音量，< 0 降低音量。
  * @param onLongPressStart 长按开始：`isLeftHalf` 为 true 表示左半屏（快退），false 为右半屏（快进）。
  * @param onLongPressEnd 长按结束（手指抬起）：调用方负责恢复倍速 / 停止快退。
+ * @param onUserInteraction 任意触摸按下（含已被子组件消费的按钮点击）：用于续期控制器自动隐藏倒计时。
  */
 data class PlayerGestureCallbacks(
     val onSingleTap: () -> Unit,
@@ -67,6 +68,7 @@ data class PlayerGestureCallbacks(
     val onVolumeChange: (deltaY: Float) -> Unit,
     val onLongPressStart: (isLeftHalf: Boolean) -> Unit = {},
     val onLongPressEnd: () -> Unit = {},
+    val onUserInteraction: () -> Unit = {},
 )
 
 /**
@@ -122,6 +124,9 @@ fun Modifier.playerGestures(
             val firstDown = awaitFirstDown(requireUnconsumed = false)
             // 覆盖层打开时不参与视频手势：事件留给页面自己的点击/滚动
             if (!enabled()) return@awaitEachGesture
+            // 触摸按下即视为一次交互：即使 DOWN 已被子组件（如控件按钮）消费，
+            // 根节点仍能在 Main pass 收到，用于统一续期控制器自动隐藏倒计时
+            callbacks.onUserInteraction()
 
             val startTime = System.currentTimeMillis()
             val startX = firstDown.position.x

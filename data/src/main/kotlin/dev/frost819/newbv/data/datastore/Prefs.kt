@@ -440,6 +440,7 @@ object Prefs {
     )
 
     // --- Bangumi（更多设置） ---
+
     /**
      * 隐藏无评分条目。
      *
@@ -493,8 +494,12 @@ object Prefs {
     val videoGridColumnsFlow: StateFlow<GridColumnCount> by lazy {
         (delegateMap[PrefKeys.videoGridColumns] as? PrefDelegate<GridColumnCount, Int>)
             ?.flow
-            ?.map { GridColumnCount.fromColumns(it as? Int ?: GridColumnCount.DEFAULT_VIDEO.columns, GridColumnCount.DEFAULT_VIDEO) }
-            ?.stateIn(scope, SharingStarted.Eagerly, GridColumnCount.DEFAULT_VIDEO)
+            ?.map {
+                GridColumnCount.fromColumns(
+                    it as? Int ?: GridColumnCount.DEFAULT_VIDEO.columns,
+                    GridColumnCount.DEFAULT_VIDEO,
+                )
+            }?.stateIn(scope, SharingStarted.Eagerly, GridColumnCount.DEFAULT_VIDEO)
             ?: MutableStateFlow(GridColumnCount.DEFAULT_VIDEO)
     }
 
@@ -507,8 +512,7 @@ object Prefs {
                     it as? Int ?: GridColumnCount.DEFAULT_BANGUMI.columns,
                     GridColumnCount.DEFAULT_BANGUMI,
                 )
-            }
-            ?.stateIn(scope, SharingStarted.Eagerly, GridColumnCount.DEFAULT_BANGUMI)
+            }?.stateIn(scope, SharingStarted.Eagerly, GridColumnCount.DEFAULT_BANGUMI)
             ?: MutableStateFlow(GridColumnCount.DEFAULT_BANGUMI)
     }
 

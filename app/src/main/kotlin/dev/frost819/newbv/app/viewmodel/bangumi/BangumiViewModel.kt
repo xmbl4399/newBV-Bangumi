@@ -9,15 +9,14 @@ import dev.frost819.newbv.bangumiapi.entity.BangumiItem
 import dev.frost819.newbv.bangumiapi.repository.BangumiRepository
 import dev.frost819.newbv.core.log.Loggers
 import dev.frost819.newbv.data.datastore.Prefs
-import java.util.Calendar
-import javax.inject.Inject
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.Calendar
+import javax.inject.Inject
 
 /**
  * 一个月份分组。
@@ -210,8 +209,7 @@ class BangumiViewModel
                                 months = loadOrderMonths(year),
                                 concurrency = LOAD_CONCURRENCY,
                                 hideNoScore = hideNoScore,
-                            )
-                            .collect { result ->
+                            ).collect { result ->
                                 if (generation != loadGeneration) return@collect
                                 loaded++
                                 if (result.isSuccess) {
@@ -246,9 +244,6 @@ class BangumiViewModel
                                     )
                                 }
                             }
-                    } catch (error: CancellationException) {
-                        // 切换年份/分类导致的取消不是错误，直接让出
-                        throw error
                     } finally {
                         if (generation == loadGeneration) {
                             _uiState.update { it.copy(loading = false) }

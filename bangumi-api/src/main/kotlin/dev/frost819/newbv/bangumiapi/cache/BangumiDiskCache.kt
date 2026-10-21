@@ -1,11 +1,11 @@
 package dev.frost819.newbv.bangumiapi.cache
 
 import dev.frost819.newbv.bangumiapi.entity.BangumiItem
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import java.io.File
 import java.util.Calendar
 import java.util.concurrent.atomic.AtomicLong
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 
 /**
  * Bangumi 列表结果的本地磁盘缓存。
@@ -150,7 +150,8 @@ class BangumiDiskCache(
         month: Int,
     ): Long {
         val now = Calendar.getInstance().apply { timeInMillis = clock() }
-        val isLive = year > now.get(Calendar.YEAR) || (year == now.get(Calendar.YEAR) && month >= now.get(Calendar.MONTH) + 1)
+        val isLive =
+            year > now.get(Calendar.YEAR) || (year == now.get(Calendar.YEAR) && month >= now.get(Calendar.MONTH) + 1)
         return if (isLive) liveTtlMillis else historyTtlMillis
     }
 
@@ -160,7 +161,10 @@ class BangumiDiskCache(
     }
 
     /** 当前缓存占用字节数。 */
-    fun sizeBytes(): Long = runCatching { rootDir.walkTopDown().filter { it.isFile }.sumOf { it.length() } }.getOrDefault(0L)
+    fun sizeBytes(): Long =
+        runCatching {
+            rootDir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+        }.getOrDefault(0L)
 
     /** 某月对应的缓存文件。 */
     private fun fileFor(
@@ -168,7 +172,7 @@ class BangumiDiskCache(
         cat: Int,
         year: Int,
         month: Int,
-    ): File = File(rootDir, "t${type}_c${cat}_${year}_${month}.json")
+    ): File = File(rootDir, "t${type}_c${cat}_${year}_$month.json")
 
     companion object {
         /** 缓存目录名（放在 `context.cacheDir` 下，随系统/「清空缓存」一起回收）。 */

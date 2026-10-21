@@ -91,6 +91,7 @@ internal object PrefKeys {
     val bangumiGridColumns = intPreferencesKey("bangumi_grid_columns")
 
     // ===== Bangumi（更多设置） =====
+
     /** 隐藏无评分条目（键名与 blbl-Bangumi / PiliPlus-Bangumi 保持一致）。 */
     val hideNoScoreMedia = booleanPreferencesKey("hide_no_score_media")
 

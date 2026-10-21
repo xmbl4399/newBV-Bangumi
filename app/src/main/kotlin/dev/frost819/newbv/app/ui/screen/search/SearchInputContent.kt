@@ -93,8 +93,7 @@ fun SearchInputContent(
                     start = ContentStartPadding,
                     top = 24.dp,
                     end = GridSpacing.contentPadding,
-                )
-                .horizontalScroll(rememberScrollState()),
+                ).horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(ColumnSpacing),
     ) {
         // 列 1：搜索框 + 软键盘

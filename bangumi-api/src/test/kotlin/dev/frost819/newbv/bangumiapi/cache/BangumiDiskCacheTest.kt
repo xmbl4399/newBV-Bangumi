@@ -2,10 +2,10 @@ package dev.frost819.newbv.bangumiapi.cache
 
 import com.google.common.truth.Truth.assertThat
 import dev.frost819.newbv.bangumiapi.entity.BangumiItem
-import java.io.File
-import java.util.Calendar
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
+import java.io.File
+import java.util.Calendar
 
 /**
  * [BangumiDiskCache] 的单元测试。
@@ -190,7 +190,6 @@ class BangumiDiskCacheTest {
 
         fun yearOf(millis: Long): Int = Calendar.getInstance().apply { timeInMillis = millis }.get(Calendar.YEAR)
 
-        fun monthOf(millis: Long): Int =
-            Calendar.getInstance().apply { timeInMillis = millis }.get(Calendar.MONTH) + 1
+        fun monthOf(millis: Long): Int = Calendar.getInstance().apply { timeInMillis = millis }.get(Calendar.MONTH) + 1
     }
 }

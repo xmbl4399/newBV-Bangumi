@@ -14,10 +14,10 @@ import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.http.HttpHeaders
 import io.ktor.serialization.kotlinx.json.json
-import java.io.IOException
-import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
+import java.io.IOException
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * Bangumi（bgm.tv）HTTP 接口客户端。
@@ -75,17 +75,18 @@ class BangumiHttpApi(
         month: Int,
         limit: Int,
         offset: Int,
-    ): BangumiSubjectPage = fetchWithFallback { base ->
-        client
-            .get("$base/v0/subjects") {
-                parameter("type", type)
-                parameter("cat", cat)
-                parameter("year", year)
-                parameter("month", month)
-                parameter("limit", limit)
-                parameter("offset", offset)
-            }.body()
-    }
+    ): BangumiSubjectPage =
+        fetchWithFallback { base ->
+            client
+                .get("$base/v0/subjects") {
+                    parameter("type", type)
+                    parameter("cat", cat)
+                    parameter("year", year)
+                    parameter("month", month)
+                    parameter("limit", limit)
+                    parameter("offset", offset)
+                }.body()
+        }
 
     /**
      * 依次尝试候选地址，每源最多 [MAX_ATTEMPTS_PER_SOURCE] 次（首次 + 退避重试）。

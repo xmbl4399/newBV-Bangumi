@@ -1,7 +1,7 @@
 package dev.frost819.newbv.bangumiapi.entity
 
-import java.util.Locale
 import kotlinx.serialization.Serializable
+import java.util.Locale
 
 /** Bangumi 条目大类：动画。 */
 const val BANGUMI_TYPE_ANIME: Int = 2

@@ -119,7 +119,8 @@ val PersonalTopNavItem.displayName: String
 val GridColumnCount.displayName: String
     get() = "$columns 列"
 
-/** Bangumi 接口地址显示名称（社区反代只显示域名，避免设置项被长 URL 撑爆）。 */val BangumiApiSource.displayName: String
+/** Bangumi 接口地址显示名称（社区反代只显示域名，避免设置项被长 URL 撑爆）。 */
+val BangumiApiSource.displayName: String
     get() =
         when (this) {
             BangumiApiSource.Official -> "官方 api.bgm.tv"

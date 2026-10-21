@@ -8,7 +8,6 @@ import dev.frost819.newbv.bangumiapi.repository.BangumiRepository
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -19,6 +18,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.io.IOException
 
 /**
  * [BangumiViewModel] 的单元测试。
@@ -301,7 +301,10 @@ class BangumiViewModelTest {
             val viewModel = BangumiViewModel(repository)
             advanceUntilIdle()
 
-            assertThat(viewModel.uiState.value.monthGroups.map { it.month }).containsExactly(12)
+            assertThat(
+                viewModel.uiState.value.monthGroups
+                    .map { it.month },
+            ).containsExactly(12)
         }
 
     @Test

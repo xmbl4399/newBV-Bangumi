@@ -118,7 +118,15 @@ class BangumiRepository(
         val collected = LinkedHashMap<Int, BangumiItem>()
         var offset = 0
         while (true) {
-            val page = httpApi.getSubjects(type = type, cat = cat, year = year, month = month, limit = PAGE_LIMIT, offset = offset)
+            val page =
+                httpApi.getSubjects(
+                    type = type,
+                    cat = cat,
+                    year = year,
+                    month = month,
+                    limit = PAGE_LIMIT,
+                    offset = offset,
+                )
             page.data
                 .filter { it.id > 0 }
                 .forEach { collected[it.id] = BangumiNormalizer.normalize(it) }

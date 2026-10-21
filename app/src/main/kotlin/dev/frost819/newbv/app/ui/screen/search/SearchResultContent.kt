@@ -108,7 +108,10 @@ private fun SearchResultItem.focusSaverKey(): String =
  * 搜索结果页内容。
  *
  * TopNav 切换 5 类结果，网格无限滚动加载，菜单键打开筛选弹窗。
- * 进入页面时自动根据 keyword 触发搜索。
+ *
+ * 首屏搜索由 [SearchResultViewModel] 在 init 中按 `SavedStateHandle` 里的关键词触发
+ * （上游 `8f82b330`），本组件只负责渲染：不再自己 `LaunchedEffect(keyword)` 重发搜索，
+ * 从播放器/详情页返回时 viewModel 存活、结果原位复用，列表不会闪空重拉。
  */
 @Composable
 fun SearchResultContent(
@@ -145,22 +148,6 @@ fun SearchResultContent(
 
     BackHandler(focusOnContent) {
         runCatching { tabRowFocusRequester.requestFocus() }
-    }
-
-    // 返回本页时 composition 会重建、本 effect 会重跑，而 [SearchResultViewModel.search]
-    // 第一件事是清空全部类型的结果并重发 5 个请求（见其 KDoc）——不加以判断，
-    // 从播放器/详情页返回就会看到列表整体闪空重拉（且丢失翻页进度，还会多补一页）。
-    // ViewModel 在返回栈中存活，故关键词一致且已有数据/在途请求时直接复用，不重搜；
-    // 仅首次进入、关键词变化、或上次加载失败（无数据且无在途请求）才真正发起搜索。
-    LaunchedEffect(keyword) {
-        if (keyword.isBlank()) return@LaunchedEffect
-        val state = viewModel.uiState.value
-        val alreadyLoaded =
-            state.keyword == keyword &&
-                state.results.values.any { it.items.isNotEmpty() || it.isLoading }
-        if (!alreadyLoaded) {
-            viewModel.search(keyword)
-        }
     }
 
     LaunchedEffect(gridState) {

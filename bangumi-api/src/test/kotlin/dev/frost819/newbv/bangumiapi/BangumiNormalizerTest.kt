@@ -21,7 +21,8 @@ class BangumiNormalizerTest {
         eps: Int = 12,
         score: Double = 6.8,
         total: Int = 1203,
-        images: BangumiImages = BangumiImages(common = "https://example.com/common.jpg", large = "https://example.com/large.jpg"),
+        images: BangumiImages =
+            BangumiImages(common = "https://example.com/common.jpg", large = "https://example.com/large.jpg"),
         tags: List<BangumiTagVote> = emptyList(),
         metaTags: List<String> = emptyList(),
     ) = BangumiSubject(

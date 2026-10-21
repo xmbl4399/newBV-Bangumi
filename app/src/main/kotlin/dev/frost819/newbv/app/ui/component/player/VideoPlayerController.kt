@@ -125,7 +125,6 @@ fun VideoPlayerController(
     var seekChangeCount by remember { mutableLongStateOf(0L) }
     var lastSeekChangeTime by remember { mutableLongStateOf(0L) }
     var seekCountdown: Job? by remember { mutableStateOf(null) }
-    var hideInfoSeekCountdown: Job? by remember { mutableStateOf(null) }
     var hideExploreCountdown: Job? by remember { mutableStateOf(null) }
 
     // 多集内容进入播放器后自动亮出一次底部控件（分集列表随之一同出现），只自动亮一次
@@ -179,6 +178,20 @@ fun VideoPlayerController(
         lastSeekChangeTime = System.currentTimeMillis()
     }
 
+    /** 隐藏信息栏 + 进度条控制器。 */
+    fun hideController() {
+        showInfoSeekController = false
+    }
+
+    // 控制器自动隐藏：可见时 5 秒无交互自动收起，输入入口调用 onInteraction 续期。
+    // visible 里额外排除整合页：整合页打开时不动底部控件（卡片以「视频标题 + 播放控件」
+    // 为上下边框，控件被收起会让卡片悬空），关闭整合页后倒计时自然重新开始。
+    val onInteraction =
+        rememberControllerAutoHide(
+            visible = showInfoSeekController && !showRelatedVideosController,
+            onHide = { hideController() },
+        )
+
     fun startSeekCountdown() {
         seekCountdown?.cancel()
         seekCountdown =
@@ -193,16 +206,7 @@ fun VideoPlayerController(
                 // 按钮行，右键随即从 seek 变成在按钮之间移焦点——用户看到的就是
                 // 「焦点在按钮间乱跳 + 进度条也被拉」。改成交给控件自己的 5s 无操作
                 // 计时：连续 seek 每次顺延，停手 5s 后自动收起。
-                // （此处不能直接调 startControllerAutoHide：它在文件中定义在本函数之后，
-                // Kotlin 局部函数必须先声明后使用，故按下述同义逻辑就地实现。）
-                if (showInfoSeekController && !showRelatedVideosController) {
-                    hideInfoSeekCountdown?.cancel()
-                    hideInfoSeekCountdown =
-                        scope.launch {
-                            delay(5000)
-                            showInfoSeekController = false
-                        }
-                }
+                onInteraction()
             }
     }
 
@@ -223,23 +227,7 @@ fun VideoPlayerController(
         onGoTime(goTime)
         if (uiState.playerState != PlayerState.Playing) onPlay()
         isSeeking = false
-        showInfoSeekController = false
-    }
-
-    /**
-     * 控制器自动隐藏计时器。触屏交互后 5 秒无操作自动收起控制器。
-     */
-    fun startControllerAutoHide() {
-        if (!showInfoSeekController) return
-        hideInfoSeekCountdown?.cancel()
-        // 整合页打开时不动底部控件：卡片以「视频标题 + 播放控件」为上下边框，
-        // 控件被收起会让卡片悬空
-        if (showRelatedVideosController) return
-        hideInfoSeekCountdown =
-            scope.launch {
-                delay(5000)
-                showInfoSeekController = false
-            }
+        hideController()
     }
 
     fun onSeekToPosition(positionMs: Long) {
@@ -247,7 +235,6 @@ fun VideoPlayerController(
         goTime = positionMs.coerceIn(0L, seekerState.value.totalDuration)
         lastSeekChangeTime = System.currentTimeMillis()
         startSeekCountdown()
-        startControllerAutoHide()
     }
 
     fun closeAllControllers() {
@@ -269,13 +256,13 @@ fun VideoPlayerController(
         showRelatedVideosController = false
         overlayFocus = PlayerOverlayFocus.None
         showInfoSeekController = true
-        startControllerAutoHide()
+        onInteraction()
     }
 
     /**
      * 整合页自动关闭计时器。唤出后 5 秒无操作自动收掉整页（含底部控件）。
      *
-     * 与 [startControllerAutoHide] 一样在每次按键时重置；页面内的触摸也会通过
+     * 与 [onInteraction] 一样在每次按键时重置；页面内的触摸也会通过
      * `onUserInteraction` 回调重置，否则一边翻列表一边会被关掉。
      */
     fun startExploreAutoHide() {
@@ -454,7 +441,6 @@ fun VideoPlayerController(
                 }
                 // 否则打开整合页：先把播放控件收起，免得它与页面抢焦点；
                 // 焦点交给左侧分集栏的当前集
-                hideInfoSeekCountdown?.cancel()
                 showInfoSeekController = false
                 overlayFocus = PlayerOverlayFocus.EpisodeList
                 showRelatedVideosController = true
@@ -478,7 +464,6 @@ fun VideoPlayerController(
                 }
                 if (showInfoSeekController && !showRelatedVideosController && !showMenuController) {
                     if (event.nativeKeyEvent.isLongPress || event.nativeKeyEvent.repeatCount > 0) {
-                        hideInfoSeekCountdown?.cancel()
                         showInfoSeekController = false
                         overlayFocus = PlayerOverlayFocus.None
                         downKeySuppressUntil = now + upKeySuppressMs
@@ -515,7 +500,7 @@ fun VideoPlayerController(
                     // 下键：唤出界面并把焦点落在底部播放控件行
                     overlayFocus = PlayerOverlayFocus.ControlBar
                     showInfoSeekController = true
-                    startControllerAutoHide()
+                    onInteraction()
                     return true
                 }
 
@@ -555,7 +540,7 @@ fun VideoPlayerController(
             // 整合页不再自动弹列表，焦点沿用旧行为（进度条）
             overlayFocus = PlayerOverlayFocus.None
             showInfoSeekController = true
-            startControllerAutoHide()
+            onInteraction()
         }
     }
 
@@ -566,7 +551,7 @@ fun VideoPlayerController(
                 .focusable()
                 .onPreviewKeyEvent { event ->
                     // 任何按键都重置底部控件的 5s 自动收起计时，以及整合页的 5s 自动关闭计时
-                    startControllerAutoHide()
+                    onInteraction()
                     startExploreAutoHide()
                     handleKeyEvent(event)
                 }.playerGestures(
@@ -582,7 +567,7 @@ fun VideoPlayerController(
                                     if (showInfoSeekController) {
                                         // 触屏唤出没有方向键语义，沿用旧行为（焦点交给进度条）
                                         overlayFocus = PlayerOverlayFocus.None
-                                        startControllerAutoHide()
+                                        onInteraction()
                                     }
                                 } else {
                                     closeAllControllers()
@@ -640,6 +625,7 @@ fun VideoPlayerController(
                                 }
                                 gestureTipState.value = GestureTipState(isActive = false)
                             },
+                            onUserInteraction = onInteraction,
                         ),
                     gestureTipState = gestureTipState,
                 ),
@@ -771,15 +757,15 @@ fun VideoPlayerController(
                 onSeekToPosition = ::onSeekToPosition,
                 onPlayPause = {
                     onPlay()
-                    startControllerAutoHide()
+                    onInteraction()
                 },
                 onPlayNext = {
                     onPlayNext()
-                    startControllerAutoHide()
+                    onInteraction()
                 },
                 onDanmakuSwitchChange = {
                     onToggleDanmaku()
-                    startControllerAutoHide()
+                    onInteraction()
                 },
                 onShowSettings = { showMenuController = true },
                 onShowRelatedVideos = {
@@ -789,7 +775,7 @@ fun VideoPlayerController(
                         hideExploreCountdown?.cancel()
                         showRelatedVideosController = false
                         overlayFocus = PlayerOverlayFocus.None
-                        startControllerAutoHide()
+                        onInteraction()
                     } else {
                         // 同一个整合页，但焦点直接给右侧相关视频栏
                         overlayFocus = PlayerOverlayFocus.Related
@@ -800,7 +786,7 @@ fun VideoPlayerController(
                 onGoToVideoInfo = onGoToVideoDetail,
                 onToggleLoop = {
                     onToggleLoop()
-                    startControllerAutoHide()
+                    onInteraction()
                 },
                 onGoToUpPage = onGoToUpPage,
                 onShowInteraction = onShowInteraction,
