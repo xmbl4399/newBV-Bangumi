@@ -74,6 +74,38 @@ data class PlayerUiState(
      * 与播放侧 [fromSeason]（走 PGC 播放接口/心跳）相互独立。
      */
     val isPgc: Boolean get() = (epid ?: 0) != 0
+
+    /**
+     * 是否存在可播放的下一集。
+     *
+     * 判定规则与 [dev.frost819.newbv.app.viewmodel.player.PlayerViewModel.playNextNow]
+     * 的查找顺序一致：先看当前项是否有 UGC 子分页可前进，再看列表里有没有下一个视频项。
+     * 播放器控件据此决定「下一集」按钮是否出现 —— 单集视频不显示该按钮。
+     */
+    val hasNextEpisode: Boolean
+        get() {
+            val index = videoList.indexOfFirst { it.aid == aid }
+            if (index == -1) return false
+            val current = videoList[index]
+            val hasUgcNext =
+                current.ugcPages?.let { pages ->
+                    val inner = pages.indexOfFirst { it.cid == cid }
+                    inner != -1 && inner + 1 < pages.size
+                } ?: false
+            return hasUgcNext || index + 1 < videoList.size
+        }
+
+    /**
+     * 是否为多集内容（合集）。
+     *
+     * 用于决定是否展示「分集」入口：单集视频没有可切换的列表。
+     * 总集数 = 各视频项自身的 UGC 子分页数（无子分页时按 1 集计）之和。
+     */
+    val isMultiEpisode: Boolean
+        get() {
+            if (videoList.isEmpty()) return false
+            return videoList.sumOf { (it.ugcPages?.size ?: 0).coerceAtLeast(1) } > 1
+        }
 }
 
 /**

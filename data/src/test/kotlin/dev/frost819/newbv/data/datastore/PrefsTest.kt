@@ -148,8 +148,10 @@ class PrefsTest {
     }
 
     @Test
-    fun `default density is 2f`() {
-        assertThat(Prefs.density).isEqualTo(2f)
+    fun `default density is 1f for the 720P baseline`() {
+        // 720P 基准：density 1.0 对应逻辑宽度 1280dp，
+        // app 层启动时会按分辨率重算（长边px / 1280），这里只验兜底值。
+        assertThat(Prefs.density).isEqualTo(1f)
     }
 
     @Test
@@ -189,13 +191,13 @@ class PrefsTest {
     }
 
     @Test
-    fun `default videoGridColumns is 4`() {
-        assertThat(Prefs.videoGridColumns).isEqualTo(GridColumnCount.Four)
+    fun `default videoGridColumns is 5`() {
+        assertThat(Prefs.videoGridColumns).isEqualTo(GridColumnCount.Five)
     }
 
     @Test
-    fun `default bangumiGridColumns is 5`() {
-        assertThat(Prefs.bangumiGridColumns).isEqualTo(GridColumnCount.Five)
+    fun `default bangumiGridColumns is 6`() {
+        assertThat(Prefs.bangumiGridColumns).isEqualTo(GridColumnCount.Six)
     }
 
     @Test
@@ -209,22 +211,10 @@ class PrefsTest {
 
     @Test
     fun `unknown stored column count falls back to the per setting default`() {
-        // 视频回退到 4、番剧回退到 5（两者的默认档不同）
-        assertThat(GridColumnCount.fromColumns(99)).isEqualTo(GridColumnCount.Four)
-        assertThat(GridColumnCount.fromColumns(99, GridColumnCount.DEFAULT_BANGUMI)).isEqualTo(GridColumnCount.Five)
-        assertThat(GridColumnCount.fromColumns(6)).isEqualTo(GridColumnCount.Six)
-    }
-
-    @Test
-    fun `default isOnboarded is false`() {
-        assertThat(Prefs.isOnboarded).isFalse()
-    }
-
-    @Test
-    fun `isOnboarded round trips through the store`() {
-        Prefs.isOnboarded = true
-
-        assertThat(Prefs.isOnboarded).isTrue()
+        // 视频回退到 5、番剧回退到 6（两者的默认档不同，且按 720P 实测调出）
+        assertThat(GridColumnCount.fromColumns(99)).isEqualTo(GridColumnCount.Five)
+        assertThat(GridColumnCount.fromColumns(99, GridColumnCount.DEFAULT_BANGUMI)).isEqualTo(GridColumnCount.Six)
+        assertThat(GridColumnCount.fromColumns(7)).isEqualTo(GridColumnCount.Seven)
     }
 
     @Test

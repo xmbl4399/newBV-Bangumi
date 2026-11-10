@@ -802,6 +802,39 @@ class PlayerViewModel
             loadVideoWithResources()
         }
 
+        /**
+         * 直进播放器时补种视频列表。
+         *
+         * 播放器有两条进入路径：详情页进入时列表已由详情页写入（含分 P / 分节结构），
+         * 而搜索卡等直进路径没有详情页上下文，列表为空。由于
+         * [PlayerUiState.hasNextEpisode] 与 [PlayerUiState.isMultiEpisode] 都只从
+         * 列表推导，空列表会让「下一集 / 分集」入口与分集列表**同时消失**；
+         * 且 [VideoInfoRepository.updateUgcPages] 是列表遍历，空列表连分 P 请求
+         * 都不会发出，缺陷会自我固化。
+         *
+         * 这里以当前视频为唯一条目补种，分 P 随后由 updateVideoPages 回填。
+         * 列表已含当前视频（详情页路径）时不动它，避免覆盖详情页写入的多节结构。
+         *
+         * 必须在 cid 解析完成后调用：直进路径的 `route.cid` 可能为 0，
+         * 用 0 补种会让 [PlayerUiState.hasNextEpisode] 的分 P 定位失配。
+         */
+        fun seedVideoListIfAbsent() {
+            val state = _uiState.value
+            if (state.aid == 0L) return
+            if (videoInfoRepository.videoList.value.any { it.aid == state.aid }) return
+            videoInfoRepository.updateVideoList(
+                listOf(
+                    VideoListItem(
+                        aid = state.aid,
+                        cid = state.cid,
+                        epid = state.epid,
+                        seasonId = state.seasonId.takeIf { it != 0 },
+                        title = state.title,
+                    ),
+                ),
+            )
+        }
+
         /** 发送心跳（进度上报）。 */
         fun trySendHeartbeat() {
             syncProgress(scope = viewModelScope, updateLocal = false)

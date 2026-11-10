@@ -79,6 +79,9 @@ fun NavGraphBuilder.videoPlayerScreen(navController: NavController) {
             )
             danmakuViewModel.loadDanmakuMask()
             subtitleViewModel.loadSubtitleList(route.aid, actualCid)
+            // 6.5 直进路径（无详情页上下文）列表为空，以当前视频补种，
+            //     否则「下一集 / 分集」入口与分集列表都不出现（真实 cid 已在第 5 步解析）
+            playerViewModel.seedVideoListIfAbsent()
             // 7. 获取播放地址并开始播放
             playerViewModel.markSessionStarted()
             playerViewModel.loadVideoWithResources()

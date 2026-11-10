@@ -576,6 +576,10 @@ fun VideoPlayerController(
                 onGoToUpPage = onGoToUpPage,
                 onShowInteraction = onShowInteraction,
                 onShowComments = onShowComments,
+                onPlayNext = onPlayNext,
+                onShowEpisodeList = { showListController = true },
+                hasNextEpisode = uiState.hasNextEpisode,
+                isMultiEpisode = uiState.isMultiEpisode,
             )
 
             // 分集列表

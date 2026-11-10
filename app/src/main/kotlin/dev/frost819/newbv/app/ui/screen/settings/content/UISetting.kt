@@ -180,6 +180,8 @@ fun UISetting(modifier: Modifier = Modifier) {
             if (dialogDensity != density) {
                 density = dialogDensity
                 Prefs.density = dialogDensity
+                // 用户一旦手动调过缩放，就不再让启动时的分辨率自适应覆盖它
+                Prefs.densityInitialized = true
             }
         },
         density = dialogDensity,

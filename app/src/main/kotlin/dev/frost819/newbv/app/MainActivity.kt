@@ -59,7 +59,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val themeMode by Prefs.themeModeFlow.collectAsState(initial = ThemeMode.Dark)
-            val density by Prefs.densityFlow.collectAsState(initial = 2.0f)
+            val density by Prefs.densityFlow.collectAsState(initial = 1.0f)
 
             val coreThemeMode =
                 when (themeMode) {
@@ -83,10 +83,8 @@ class MainActivity : ComponentActivity() {
                                     .fillMaxSize()
                                     .windowInsetsPadding(WindowInsets.safeDrawing),
                         ) {
-                            // 不显式传 startDestination：由 AppNavHost 按 Prefs.isOnboarded
-                            // 推导（未完成首次启动引导 → 模式选择页，否则直接主页）。
-                            // 曾在这里硬编码 HomeRoute，把默认值里的推导整个覆盖掉，
-                            // 导致引导页永远不出现。
+                            // 起始页固定主页：界面缩放已改为按分辨率自适应，
+                            // 首次启动不再有模式选择页。
                             AppNavHost()
                         }
                     }

@@ -371,22 +371,19 @@ object Prefs {
     /**
      * 界面缩放密度（1dp = N px）。
      *
-     * 默认值 2f 只是兜底：**首次启动由 app 层按屏幕宽度重算**
-     * （720P → 1x、1080P 及以上 → 2x，见 `BVApplication.initDensityByScreenWidth`）。
+     * 默认值 1f 是 **720P 基准**：app 层每次启动按屏幕长边推导
+     * `density = 长边px / 1280`（720P → 1.0、1080P → 1.5、4K → 3.0），
+     * 见 `BVApplication.initDensityByScreenWidth`。
      */
-    var density by pref(PrefKeys.density, 2f)
-
-    /** 界面缩放是否已按屏幕宽度自动初始化过（仅首次启动写一次，之后尊重用户手动设置）。 */
-    var densityInitialized by pref(PrefKeys.densityInitialized, false)
+    var density by pref(PrefKeys.density, 1f)
 
     /**
-     * 是否已完成首次启动引导（标清 / 高清模式选择）。
+     * 界面缩放是否已被**用户手动接管**。
      *
-     * **默认 false**：新安装首次启动时展示模式选择页，由用户选「标清 / 高清」后置 true。
-     * 老版本升级上来的用户没有这个键，也会在升级后首启看到一次 —— 视为一次模式确认，
-     * 不属回归（他会顺手把已生效的档位再确认一遍）。
+     * 为 false 时 app 每次启动都按分辨率重算 density；用户在
+     * 「界面设置 → 界面缩放」里改过之后置 true，此后不再自动覆盖。
      */
-    var isOnboarded by pref(PrefKeys.isOnboarded, false)
+    var densityInitialized by pref(PrefKeys.densityInitialized, false)
 
     /** 启动页（左侧导航项）。 */
     var homeLeftNavItem by pref(

@@ -28,6 +28,7 @@ import okio.Path.Companion.toPath
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Provider
+import kotlin.math.roundToInt
 
 /**
  * new BV 应用入口。
@@ -35,7 +36,7 @@ import javax.inject.Provider
  * 初始化顺序：
  * 1. Hilt 依赖注入（由 [HiltAndroidApp] 自动处理）
  * 2. [Prefs] 偏好设置初始化（阻塞读取 DataStore 首帧）
- * 3. **界面缩放按屏幕宽度自动初始化**（仅首次启动，见 [initDensityByScreenWidth]）
+ * 3. **界面缩放按屏幕分辨率自适应**（720P = 1.0 基准，见 [initDensityByScreenWidth]）
  * 4. [CrashHandler] 全局崩溃处理（通过 Hilt 注入，构造时自动 install）
  * 5. [HttpServer] 本地日志管理服务器（通过 Hilt 注入，按需启动）
  */
@@ -178,35 +179,46 @@ class BVApplication : Application() {
     }
 
     /**
-     * 首次启动时按屏幕分辨率决定界面缩放，之后一律沿用该值。
+     * 按屏幕分辨率自适应界面缩放，**以 720P 为 1.0 基准**。
      *
-     * [Prefs.density] 的语义是 Compose 的 density（1dp = N px），不是"倍率"：
-     * - 720P（1280×720）取 2 会让逻辑宽度只剩 **640dp**，TV 版式被撑爆、一行放不下几个卡片；
-     * - 1080P（1920×1080）取 2 得到 **960dp**，才是正常的 TV 逻辑宽度。
+     * [Prefs.density] 的语义是 Compose 的 density（1dp = N px），不是"倍率"。
+     * 换算目的是让**逻辑宽度恒定**：无论物理分辨率多少，屏幕都是同一个
+     * 1280dp 宽的版面，这样 TV 版式（网格列数、卡片尺寸）在所有设备上一致。
      *
-     * 因此规则是：**低于 1080P 取 1x，1080P 及以上取 2x**。
+     * 公式：`density = 屏幕长边px / 1280`，即
+     * - 720P（1280×720）→ 1.0，逻辑宽度 1280dp（基准）
+     * - 1080P（1920×1080）→ 1.5，逻辑宽度 1280dp
+     * - 4K（3840×2160）→ 3.0，逻辑宽度 1280dp
+     * - 480P（854×480）→ 约 0.67，逻辑宽度仍约 1280dp
      *
      * 判据取**屏幕长边**而不是 `widthPixels`：手机竖屏时 widthPixels 只有 1224，
-     * 但它和横屏一样是 1080P 级屏幕，用宽度判会把手机误判成 1x。
+     * 但它和横屏一样是 1080P 级屏幕，用宽度判会算错。
      *
-     * **只在首次启动执行一次**（靠 [Prefs.densityInitialized] 标记）。标记一旦写上，
-     * 后续启动直接 return，用户在「界面设置 → 界面缩放」里选的值得以保留，
-     * 不会每次开 App 又被屏幕分辨率覆盖回去。
+     * **每次启动都重算**（旧实现只在首启写一次，导致换设备/改分辨率后沿用错误值）。
+     * 但若用户在「界面设置 → 界面缩放」里手动改过（[Prefs.densityInitialized] 为 true
+     * 即表示已被用户接管），则尊重用户选择、不再覆盖。
      */
     private fun initDensityByScreenWidth() {
         if (Prefs.densityInitialized) return
         val metrics = resources.displayMetrics
         val longSidePx = maxOf(metrics.widthPixels, metrics.heightPixels)
-        val density = if (longSidePx >= FHD_LONG_SIDE_PX) 2f else 1f
-        Prefs.density = density
-        Prefs.densityInitialized = true
+        // 以 720P 的长边（1280px）为 1.0 基准；保留一位小数，避免浮点噪声导致重建
+        val raw = longSidePx.toFloat() / BASE_LONG_SIDE_PX
+        val density = (raw * 10f).roundToInt() / 10f
+        Prefs.density = density.coerceIn(MIN_DENSITY, MAX_DENSITY)
         logger.info {
-            "density auto-initialized: ${metrics.widthPixels}x${metrics.heightPixels} -> density=$density"
+            "density auto-adapted: ${metrics.widthPixels}x${metrics.heightPixels} -> density=${Prefs.density}"
         }
     }
 
     private companion object {
-        /** 1080P 长边像素数。达到即用 2x，否则（720P 等）退回 1x。 */
-        const val FHD_LONG_SIDE_PX = 1920
+        /** 720P 屏幕长边像素数，作为 1.0 缩放的基准。 */
+        const val BASE_LONG_SIDE_PX = 1280f
+
+        /** 缩放下限：再小封面会糊成一片。 */
+        const val MIN_DENSITY = 0.5f
+
+        /** 缩放上限：8K 级别，再大没有实际设备。 */
+        const val MAX_DENSITY = 5f
     }
 }

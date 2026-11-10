@@ -89,6 +89,10 @@ import kotlinx.coroutines.delay
  * @param onSeekGoTime 确认 seek 回调
  * @param onSeekToPosition 触屏拖拽/点击进度条时 seek 到指定位置（毫秒）
  * @param onPlayPause 播放/暂停回调
+ * @param hasNextEpisode 是否存在下一集（决定「下一集」按钮是否出现）
+ * @param isMultiEpisode 是否为多集内容（决定「分集」按钮是否出现）
+ * @param onPlayNext 播放下一集回调
+ * @param onShowEpisodeList 打开分集列表回调
  * @param onDanmakuSwitchChange 弹幕开关回调
  * @param onShowSettings 打开设置回调
  * @param onShowRelatedVideos 打开相关视频回调
@@ -126,6 +130,10 @@ fun ControllerVideoInfo(
     onGoToUpPage: () -> Unit,
     onShowInteraction: () -> Unit,
     onShowComments: () -> Unit,
+    onPlayNext: () -> Unit = {},
+    onShowEpisodeList: () -> Unit = {},
+    hasNextEpisode: Boolean = false,
+    isMultiEpisode: Boolean = false,
 ) {
     Box(modifier = modifier.fillMaxSize()) {
         AnimatedVisibility(
@@ -172,6 +180,10 @@ fun ControllerVideoInfo(
                 onGoToUpPage = onGoToUpPage,
                 onShowInteraction = onShowInteraction,
                 onShowComments = onShowComments,
+                onPlayNext = onPlayNext,
+                onShowEpisodeList = onShowEpisodeList,
+                hasNextEpisode = hasNextEpisode,
+                isMultiEpisode = isMultiEpisode,
             )
         }
     }
@@ -283,6 +295,10 @@ fun ControllerVideoInfoBottom(
     onGoToUpPage: () -> Unit,
     onShowInteraction: () -> Unit,
     onShowComments: () -> Unit,
+    onPlayNext: () -> Unit = {},
+    onShowEpisodeList: () -> Unit = {},
+    hasNextEpisode: Boolean = false,
+    isMultiEpisode: Boolean = false,
 ) {
     val seekFocusRequester = remember { FocusRequester() }
     val buttonsFocusRequester = remember { FocusRequester() }
@@ -422,6 +438,14 @@ fun ControllerVideoInfoBottom(
         val icons =
             buildList {
                 add(ControllerIcon(R.drawable.play_pause_24px, "播放/暂停", onPlayPause))
+                // 「下一集」只在确有下一集时出现：单集视频显示它等于给一个点了没反应的按钮
+                if (hasNextEpisode) {
+                    add(ControllerIcon(R.drawable.skip_next_24px, "下一集", onPlayNext))
+                }
+                // 「分集」只在多集内容时出现：单集视频没有可切换的列表
+                if (isMultiEpisode) {
+                    add(ControllerIcon(R.drawable.playlist_play_24px, "分集", onShowEpisodeList))
+                }
                 add(
                     ControllerIcon(
                         if (danmakuEnabled) R.drawable.danmaku_on_24px else R.drawable.danmaku_off_24px,
