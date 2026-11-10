@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.BrightnessHigh
@@ -25,35 +24,6 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import dev.frost819.newbv.app.util.formatHourMinSec
-
-/** 提示底色：上圆与下胶囊共用同一透明度。 */
-private val TIP_CONTAINER = Color.Black.copy(alpha = 0.6f)
-
-/**
- * 提示圆形的边长。
- *
- * 用**固定正方形**而不是"内容自适应 + 圆形裁剪"：后者在"图标 + 数值"竖排时
- * 高度大于宽度，[CircleShape] 只能裁出椭圆。
- *
- * 取 84dp：原先 112dp 在 720P 档下占掉近 1/6 屏高，对「只是提示一下当前倍速」
- * 这个用途来说过于抢眼。84dp 仍容得下 26dp 图标 + 数值竖排（内容高约 56dp），
- * 也容得下 Seek 的「快进/快退」四字，且圆形轮廓不被撑成椭圆。
- */
-private val TIP_CIRCLE_SIZE = 84.dp
-
-/** 提示图标尺寸（随圆圈一同收小）。 */
-private val TIP_ICON_SIZE = 26.dp
-
-/** 图标与数值之间的间距：取小值让两者靠紧，整体更接近正圆。 */
-private val TIP_ICON_TEXT_GAP = 2.dp
-
-/** 下方胶囊进度条的内边距（随圆圈一同收小）。 */
-private val TIP_CAPSULE_PADDING_H = 12.dp
-private val TIP_CAPSULE_PADDING_V = 4.dp
-
-/** 圆圈与下方胶囊之间的间距。 */
-private val TIP_CAPSULE_GAP = 6.dp
 
 /**
  * 手势提示覆盖层。
@@ -61,24 +31,12 @@ private val TIP_CAPSULE_GAP = 6.dp
  * 在手势执行期间显示反馈（亮度/音量百分比、倍速值、seek 状态）。
  * 与 [PlayStateTips]/[SkipTips] 平级，放在 [VideoPlayerController] 覆盖层中。
  *
- * 版式：**圆形**内只有图标与数值（两者靠紧，保证是正圆）；长按倍速的
- * 「当前进度 / 总进度」放在圆形下方，用**同透明度的胶囊底**承托。
- *
- * **长按倍速例外**：此时画面本身已在快速翻滚，再压一个圆形提示（图标 + 「3.0x」）
- * 只会遮挡画面，故倍速期间**只保留下方胶囊进度**，不显示圆形层（见 [speedProgressOnly]）。
- * 亮度 / 音量 / seek 仍用圆形提示。
- *
  * @param state 手势提示状态。
- * @param modifier 修饰符。
- * @param positionMs 当前播放进度（毫秒），负值表示未知；仅长按倍速时展示。
- * @param durationMs 视频总时长（毫秒），为 0 表示未知；仅长按倍速时展示。
  */
 @Composable
 fun GestureTip(
     state: GestureTipState,
     modifier: Modifier = Modifier,
-    positionMs: Long = -1L,
-    durationMs: Long = 0L,
 ) {
     AnimatedVisibility(
         visible = state.isActive,
@@ -86,79 +44,49 @@ fun GestureTip(
         exit = fadeOut(),
         modifier = modifier,
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(TIP_CAPSULE_GAP),
+        Box(
+            modifier =
+                Modifier
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            val iconVector =
-                when (state.type) {
-                    GestureTipType.Brightness -> Icons.Rounded.BrightnessHigh
-                    GestureTipType.Volume -> Icons.AutoMirrored.Rounded.VolumeUp
-                    GestureTipType.Speed -> Icons.Rounded.Speed
-                    GestureTipType.Seek -> Icons.Rounded.FastForward
-                    GestureTipType.None -> null
-                }
-            val displayText =
-                when (state.type) {
-                    GestureTipType.Brightness -> "${(state.value * 100).toInt()}%"
-                    GestureTipType.Volume -> "${state.value.toInt()}%"
-                    GestureTipType.Speed -> "${state.value}x"
-                    GestureTipType.Seek -> "快进/快退"
-                    GestureTipType.None -> ""
-                }
-
-            // 长按倍速且进度已知时，圆形层整个省掉：只留下方胶囊
-            val speedProgressOnly = state.type == GestureTipType.Speed && positionMs >= 0L && durationMs > 0L
-
-            if (!speedProgressOnly) {
-                Box(
-                    modifier =
-                        Modifier
-                            .size(TIP_CIRCLE_SIZE)
-                            .clip(CircleShape)
-                            .background(TIP_CONTAINER),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(TIP_ICON_TEXT_GAP),
-                    ) {
-                        if (iconVector != null) {
-                            Icon(
-                                imageVector = iconVector,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(TIP_ICON_SIZE),
-                            )
-                        }
-                        if (displayText.isNotEmpty()) {
-                            Text(
-                                text = displayText,
-                                color = Color.White,
-                                style = MaterialTheme.typography.labelLarge,
-                                maxLines = 1,
-                            )
-                        }
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                val iconVector =
+                    when (state.type) {
+                        GestureTipType.Brightness -> Icons.Rounded.BrightnessHigh
+                        GestureTipType.Volume -> Icons.AutoMirrored.Rounded.VolumeUp
+                        GestureTipType.Speed -> Icons.Rounded.Speed
+                        GestureTipType.Seek -> Icons.Rounded.FastForward
+                        GestureTipType.None -> null
                     }
+                val displayText =
+                    when (state.type) {
+                        GestureTipType.Brightness -> "${(state.value * 100).toInt()}%"
+                        GestureTipType.Volume -> "${state.value.toInt()}%"
+                        GestureTipType.Speed -> "${state.value}x"
+                        GestureTipType.Seek -> "快进/快退"
+                        GestureTipType.None -> ""
+                    }
+                if (iconVector != null) {
+                    Icon(
+                        imageVector = iconVector,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(32.dp),
+                    )
                 }
-            }
-
-            // 进度时间：胶囊底（与圆形同透明度），随播放实时刷新
-            if (state.type == GestureTipType.Speed && positionMs >= 0L && durationMs > 0L) {
-                Text(
-                    modifier =
-                        Modifier
-                            .clip(RoundedCornerShape(percent = 50))
-                            .background(TIP_CONTAINER)
-                            .padding(
-                                horizontal = TIP_CAPSULE_PADDING_H,
-                                vertical = TIP_CAPSULE_PADDING_V,
-                            ),
-                    text = "${positionMs.formatHourMinSec()} / ${durationMs.formatHourMinSec()}",
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelLarge,
-                    maxLines = 1,
-                )
+                if (displayText.isNotEmpty()) {
+                    Text(
+                        text = displayText,
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                }
             }
         }
     }

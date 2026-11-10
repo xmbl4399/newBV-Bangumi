@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -44,6 +43,7 @@ import dev.frost819.newbv.app.ui.component.player.menu.MenuController
 import dev.frost819.newbv.app.ui.state.player.PlayerState
 import dev.frost819.newbv.app.ui.state.player.PlayerUiState
 import dev.frost819.newbv.app.ui.state.player.SeekerState
+import dev.frost819.newbv.app.ui.state.player.errorMessage
 import dev.frost819.newbv.app.util.VideoShotImageCache
 import dev.frost819.newbv.biliapi.entity.video.Subtitle
 import dev.frost819.newbv.core.theme.BVTheme
@@ -64,8 +64,9 @@ import kotlinx.coroutines.launch
  * 2. BottomSubtitle — 字幕文本
  * 3. SkipTips — 跳转提示
  * 4. PlayStateTips — 播放状态提示
- * 5. PlayerExploreController — 选集 / 相关视频整合页（左分集栏 + 右相关栏）
+ * 5. RelatedVideosController — 相关视频
  * 6. ControllerVideoInfo — 信息栏 + 进度条 + 按钮
+ * 7. VideoListController — 分集列表
  * 8. MenuController — 设置菜单
  */
 @Composable
@@ -107,13 +108,14 @@ fun VideoPlayerController(
     val scope = rememberCoroutineScope()
 
     // 覆盖层可见性
+    var showListController by remember { mutableStateOf(false) }
     var showMenuController by remember { mutableStateOf(false) }
     var showInfoSeekController by remember { mutableStateOf(false) }
     var showRelatedVideosController by remember { mutableStateOf(false) }
-
     val showClickableControllers by remember {
         derivedStateOf {
-            showMenuController ||
+            showListController ||
+                showMenuController ||
                 showInfoSeekController ||
                 showRelatedVideosController
         }
@@ -125,14 +127,6 @@ fun VideoPlayerController(
     var seekChangeCount by remember { mutableLongStateOf(0L) }
     var lastSeekChangeTime by remember { mutableLongStateOf(0L) }
     var seekCountdown: Job? by remember { mutableStateOf(null) }
-    var hideExploreCountdown: Job? by remember { mutableStateOf(null) }
-
-    // 多集内容进入播放器后自动亮出一次底部控件（分集列表随之一同出现），只自动亮一次
-    var controlsAutoShown by remember { mutableStateOf(false) }
-
-    // 本次唤出的焦点落点：自动亮出 / 上键 → 分集列表；下键 → 播放控件行。
-    // 由唤出方统一决定，避免「分集列表和进度条各自抢焦点」的竞态（见 PlayerOverlayFocus）。
-    var overlayFocus by remember { mutableStateOf(PlayerOverlayFocus.None) }
 
     // 常显进度条
     var showPersistentSeek by remember { mutableStateOf(Prefs.showPersistentSeek) }
@@ -140,18 +134,6 @@ fun VideoPlayerController(
     // 手势状态
     val gestureTipState = rememberGestureTipState()
     var currentBrightness by remember { mutableFloatStateOf(-1f) }
-    // 长按倍速：仅右半屏 3× 快进（左半屏的 3× 倒播已按用户要求移除）
-    val longPressSpeed = 3f
-    var longPressSpeedActive by remember { mutableStateOf(false) }
-    var longPressSavedSpeed by remember { mutableFloatStateOf(1f) }
-    // 长按上键关闭整合页后，屏蔽上键的时长（毫秒）；期间的上键事件一律吞掉
-    val upKeySuppressMs = 3000L
-    var upKeySuppressUntil by remember { mutableStateOf(0L) }
-    // 长按下键收起底部播放控件后同理会留下 repeat 事件，若不放行会被下面的"唤出控件"
-    // 分支立刻又弹回来，故同样开一个屏蔽窗口
-    var downKeySuppressUntil by remember { mutableStateOf(0L) }
-    // 音量手势跨事件累积位移：慢速拖动单事件位移不足一档，逐事件取整会被整段吞掉
-    val volumeStepAccumulator = remember { GestureStepAccumulator(VOLUME_GESTURE_STEP_PX) }
 
     fun calCoefficient(): Long =
         if (System.currentTimeMillis() - lastSeekChangeTime < 200) {
@@ -183,12 +165,10 @@ fun VideoPlayerController(
         showInfoSeekController = false
     }
 
-    // 控制器自动隐藏：可见时 5 秒无交互自动收起，输入入口调用 onInteraction 续期。
-    // visible 里额外排除整合页：整合页打开时不动底部控件（卡片以「视频标题 + 播放控件」
-    // 为上下边框，控件被收起会让卡片悬空），关闭整合页后倒计时自然重新开始。
+    // 控制器自动隐藏：可见时 5 秒无交互自动收起，输入入口调用 onInteraction 续期
     val onInteraction =
         rememberControllerAutoHide(
-            visible = showInfoSeekController && !showRelatedVideosController,
+            visible = showInfoSeekController,
             onHide = { hideController() },
         )
 
@@ -200,13 +180,7 @@ fun VideoPlayerController(
                 onGoTime(goTime)
                 if (uiState.playerState != PlayerState.Playing) onPlay()
                 isSeeking = false
-                // 这里**不**收播放控件：长按方向键连续 seek 时，每次 seek 都把控件收掉，
-                // 会让紧随其后的下一次按键变成「重新唤出控件」，而重新唤出会按
-                // overlayFocus 重新定位焦点（曾被下键写成 ControlBar），焦点于是被丢到
-                // 按钮行，右键随即从 seek 变成在按钮之间移焦点——用户看到的就是
-                // 「焦点在按钮间乱跳 + 进度条也被拉」。改成交给控件自己的 5s 无操作
-                // 计时：连续 seek 每次顺延，停手 5s 后自动收起。
-                onInteraction()
+                hideController()
             }
     }
 
@@ -238,41 +212,10 @@ fun VideoPlayerController(
     }
 
     fun closeAllControllers() {
-        hideExploreCountdown?.cancel()
+        hideController()
+        showListController = false
         showMenuController = false
-        showInfoSeekController = false
         showRelatedVideosController = false
-    }
-
-    /**
-     * 只收起整合页，**保留底部播放控件**。
-     *
-     * 与 [closeAllControllers] 的区别只是不关控件栏：整合页的关闭动作（按钮再点一次、
-     * 选完分集、选完相关视频）都不该连带把用户正在看的控件栏一起收掉，
-     * 控件栏自己的 5s 自动收起计时接管后续。
-     */
-    fun hideExploreController() {
-        hideExploreCountdown?.cancel()
-        showRelatedVideosController = false
-        overlayFocus = PlayerOverlayFocus.None
-        showInfoSeekController = true
-        onInteraction()
-    }
-
-    /**
-     * 整合页自动关闭计时器。唤出后 5 秒无操作自动收掉整页（含底部控件）。
-     *
-     * 与 [onInteraction] 一样在每次按键时重置；页面内的触摸也会通过
-     * `onUserInteraction` 回调重置，否则一边翻列表一边会被关掉。
-     */
-    fun startExploreAutoHide() {
-        if (!showRelatedVideosController) return
-        hideExploreCountdown?.cancel()
-        hideExploreCountdown =
-            scope.launch {
-                delay(5000)
-                closeAllControllers()
-            }
     }
 
     /**
@@ -301,11 +244,7 @@ fun VideoPlayerController(
         var status: String? = null
         when (action) {
             PlayerCustomShortcutAction.OpenSettings -> showMenuController = true
-            PlayerCustomShortcutAction.OpenRelatedVideos -> {
-                overlayFocus = PlayerOverlayFocus.Related
-                showRelatedVideosController = true
-                startExploreAutoHide()
-            }
+            PlayerCustomShortcutAction.OpenRelatedVideos -> showRelatedVideosController = true
             PlayerCustomShortcutAction.PlayPrevious -> onPlayPrevious()
             PlayerCustomShortcutAction.PlayNext -> onPlayNext()
             PlayerCustomShortcutAction.OpenVideoDetail -> onGoToVideoDetail()
@@ -382,7 +321,7 @@ fun VideoPlayerController(
             }
 
             Key.Menu, Key(763) -> {
-                showInfoSeekController = false
+                hideController()
                 showMenuController = !showMenuController
                 return true
             }
@@ -401,83 +340,9 @@ fun VideoPlayerController(
                 if (uiState.playerState == PlayerState.Playing) onPause()
                 return true
             }
-
-            Key.DirectionUp -> {
-                val now = System.currentTimeMillis()
-                // 长按关闭后的屏蔽窗口：按住不放时紧随的 repeat 事件会走到下面的"开页"分支，
-                // 把刚关掉的整合页又呼出来，故窗口内的上键一律吞掉；按住期间窗口顺延，
-                // 避免长按超过窗口时长时松手前又弹出
-                if (now < upKeySuppressUntil) {
-                    if (event.nativeKeyEvent.repeatCount > 0) {
-                        upKeySuppressUntil = now + upKeySuppressMs
-                    }
-                    return true
-                }
-                if (showRelatedVideosController) {
-                    // 整合页已打开：**长按**上键才关闭整页；**短按直接放行**，
-                    // 交给焦点系统在分集栏/相关栏里上移焦点
-                    // （曾做过"再按一次即关"的开关式，用户否决：那样列表无法上移）
-                    if (event.nativeKeyEvent.isLongPress || event.nativeKeyEvent.repeatCount > 0) {
-                        closeAllControllers()
-                        upKeySuppressUntil = now + upKeySuppressMs
-                        return true
-                    }
-                    return false
-                }
-                if (showMenuController) {
-                    // 设置菜单打开时，上键必须放行给菜单自己的焦点系统（在菜单项之间上移）。
-                    // 本分支在 always-active 的 when 里，没有 showClickableControllers 门禁，
-                    // 若不在菜单上单独拦一层，上键会继续走到下面的"开整合页"分支，
-                    // 把整合页叠在菜单上（用户报告的叠加 bug）。
-                    return false
-                }
-                if (showInfoSeekController) {
-                    // 底部播放控件可见时，上键只做**控件内的焦点切换**（按钮行 → 进度条），
-                    // 不再唤出整合页：此时用户面对的是播放控件，想要的是换焦点而不是翻页。
-                    // 具体切换由 ControllerVideoInfo 里进度条/按钮行的 onKeyEvent 完成——
-                    // 注意本函数挂在根节点的 onPreviewKeyEvent 上，**先于子节点执行**，
-                    // 一旦在这里 return true 就永远轮不到子节点，所以必须 return false 放行。
-                    return false
-                }
-                // 否则打开整合页：先把播放控件收起，免得它与页面抢焦点；
-                // 焦点交给左侧分集栏的当前集
-                showInfoSeekController = false
-                overlayFocus = PlayerOverlayFocus.EpisodeList
-                showRelatedVideosController = true
-                startExploreAutoHide()
-                return true
-            }
-
-            Key.DirectionDown -> {
-                // 底部播放控件可见时，**长按**下键收起控件；短按放行给子节点，
-                // 焦点在控件内下移（进度条 → 按钮行，由 ControllerVideoInfo 的 onKeyEvent 处理）。
-                // 控件不可见时**不在这里处理**，落到下面原有的"唤出控件"分支。
-                val now = System.currentTimeMillis()
-                // 屏蔽窗口必须放在**最外层**：长按收起控件的瞬间 showInfoSeekController 已变 false，
-                // 若把窗口检查写在下面那个 if 里面，紧随的 repeat 事件就不再匹配该 if，
-                // 直接掉到文件末尾的"唤出控件"分支把控件又弹回来（长按看起来完全没生效）。
-                if (now < downKeySuppressUntil) {
-                    if (event.nativeKeyEvent.repeatCount > 0) {
-                        downKeySuppressUntil = now + upKeySuppressMs
-                    }
-                    return true
-                }
-                if (showInfoSeekController && !showRelatedVideosController && !showMenuController) {
-                    if (event.nativeKeyEvent.isLongPress || event.nativeKeyEvent.repeatCount > 0) {
-                        showInfoSeekController = false
-                        overlayFocus = PlayerOverlayFocus.None
-                        downKeySuppressUntil = now + upKeySuppressMs
-                        return true
-                    }
-                    return false
-                }
-            }
         }
 
         // 覆盖层未打开时的按键（KeyUp 已被顶层过滤，此处均为 KeyDown）
-        // 注意：upKeySuppressUntil / downKeySuppressUntil 的屏蔽窗口还要在下面用一次，
-        // 因为它们记录的是「刚刚用长按关掉了某个覆盖层」，紧接着的 repeat 事件必须继续吞，
-        // 否则会在同一分支里把刚关掉的东西又弹回来。
         if (!showClickableControllers) {
             when (event.key) {
                 in confirmKeys -> {
@@ -496,11 +361,13 @@ fun VideoPlayerController(
                     }
                 }
 
+                Key.DirectionUp -> {
+                    showListController = true
+                    return true
+                }
+
                 Key.DirectionDown -> {
-                    // 下键：唤出界面并把焦点落在底部播放控件行
-                    overlayFocus = PlayerOverlayFocus.ControlBar
                     showInfoSeekController = true
-                    onInteraction()
                     return true
                 }
 
@@ -509,18 +376,12 @@ fun VideoPlayerController(
                         onCancelSkipToNextEp()
                         return true
                     }
-                    // 由 seek 键唤出的控件：焦点必须落回进度条。
-                    // 控件重新组合时 LaunchedEffect(focusTarget) 会按 overlayFocus 定位，
-                    // 若这里留着上一次下键写入的 ControlBar，焦点会被丢到按钮行，
-                    // 于是紧接着的方向键变成在按钮之间移焦点——用户看到的「焦点乱跳」。
-                    overlayFocus = PlayerOverlayFocus.None
                     showInfoSeekController = true
                     onDirectionLeft()
                     return true
                 }
 
                 Key.DirectionRight, Key.MediaFastForward -> {
-                    overlayFocus = PlayerOverlayFocus.None
                     showInfoSeekController = true
                     onDirectionRight()
                     return true
@@ -531,43 +392,25 @@ fun VideoPlayerController(
         return false
     }
 
-    // 多集内容进入播放器后自动亮出一次底部控件（提示「相关视频」页里能选集），
-    // 随后按 5s 无操作收起。单集内容不自动亮，避免无意义遮挡；
-    // controlsAutoShown 只置一次，用户手动收起后不再重弹。
-    LaunchedEffect(uiState.isMultiEpisode, uiState.videoList.size) {
-        if (!controlsAutoShown && uiState.isMultiEpisode && uiState.videoList.isNotEmpty()) {
-            controlsAutoShown = true
-            // 整合页不再自动弹列表，焦点沿用旧行为（进度条）
-            overlayFocus = PlayerOverlayFocus.None
-            showInfoSeekController = true
-            onInteraction()
-        }
-    }
-
     Box(
         modifier =
             modifier
                 .background(Color.Black)
                 .focusable()
                 .onPreviewKeyEvent { event ->
-                    // 任何按键都重置底部控件的 5s 自动收起计时，以及整合页的 5s 自动关闭计时
                     onInteraction()
-                    startExploreAutoHide()
                     handleKeyEvent(event)
                 }.playerGestures(
                     totalDuration = { seekerState.value.totalDuration },
                     controllerVisible = { showInfoSeekController },
-                    // 整合页打开时屏蔽视频手势：否则在页面上滑动会同时触发亮度/音量
-                    enabled = { !showRelatedVideosController },
                     callbacks =
                         PlayerGestureCallbacks(
                             onSingleTap = {
                                 if (!showClickableControllers) {
-                                    showInfoSeekController = !showInfoSeekController
                                     if (showInfoSeekController) {
-                                        // 触屏唤出没有方向键语义，沿用旧行为（焦点交给进度条）
-                                        overlayFocus = PlayerOverlayFocus.None
-                                        onInteraction()
+                                        hideController()
+                                    } else {
+                                        showInfoSeekController = true
                                     }
                                 } else {
                                     closeAllControllers()
@@ -595,35 +438,18 @@ fun VideoPlayerController(
                                 }
                             },
                             onVolumeChange = { deltaY ->
-                                // 音量交给系统音量条（adjustVolume 带 FLAG_SHOW_UI），不再画自定义提示
                                 val audioManager =
                                     context.getSystemService(android.content.Context.AUDIO_SERVICE)
                                         as? android.media.AudioManager
-                                val steps = volumeStepAccumulator.steps(deltaY)
-                                if (audioManager != null && steps != 0) {
-                                    adjustVolume(audioManager, steps)
-                                }
-                            },
-                            // 长按：仅右半屏 3× 快进（松开恢复原倍速）；左半屏不做任何处理
-                            onLongPressStart = { isLeftHalf ->
-                                if (!isLeftHalf) {
-                                    longPressSavedSpeed = uiState.playSpeed
-                                    longPressSpeedActive = true
-                                    onPlaySpeedChange(longPressSpeed)
+                                if (audioManager != null) {
+                                    val volumePercent = adjustVolume(audioManager, deltaY)
                                     gestureTipState.value =
                                         GestureTipState(
                                             isActive = true,
-                                            type = GestureTipType.Speed,
-                                            value = longPressSpeed,
+                                            type = GestureTipType.Volume,
+                                            value = volumePercent.toFloat(),
                                         )
                                 }
-                            },
-                            onLongPressEnd = {
-                                if (longPressSpeedActive) {
-                                    longPressSpeedActive = false
-                                    onPlaySpeedChange(longPressSavedSpeed)
-                                }
-                                gestureTipState.value = GestureTipState(isActive = false)
                             },
                             onUserInteraction = onInteraction,
                         ),
@@ -701,35 +527,24 @@ fun VideoPlayerController(
             PlayStateTips(
                 isPlaying = uiState.playerState == PlayerState.Playing,
                 isBuffering = uiState.isBuffering,
-                isError = uiState.playerState is PlayerState.Error,
-                errorMessage = (uiState.playerState as? PlayerState.Error)?.message,
+                errorMessage = uiState.playerState.errorMessage,
             )
 
-            // 手势提示（亮度/音量/倍速反馈）；长按倍速时附带「当前进度 / 总进度」
+            // 手势提示（亮度/音量/倍速反馈）
             GestureTip(
                 state = gestureTipState.value,
-                positionMs = seekerState.value.currentTime,
-                durationMs = seekerState.value.totalDuration,
                 modifier = Modifier.align(Alignment.Center),
             )
 
-            // 选集 / 相关视频整合页（左：分集栏，右：相关视频栏）
-            PlayerExploreController(
+            // 相关视频
+            RelatedVideosController(
                 show = showRelatedVideosController,
-                currentCid = uiState.cid,
-                videoList = uiState.videoList,
                 relatedVideos = uiState.relatedVideos,
-                focusTarget = overlayFocus,
-                onUserInteraction = { startExploreAutoHide() },
-                onPlayNewVideo = { item ->
-                    onPlayNewVideo(item)
-                    // 选定分集即收起整页（保留底部控件）
-                    hideExploreController()
-                },
                 onVideoClicked = { video ->
+                    // 选中即收起浮层；否则切视频后浮层仍停留在屏幕上，
+                    // 焦点与旧列表会残留在新视频画面上
+                    showRelatedVideosController = false
                     onRelatedVideoClicked(video)
-                    // 选了新视频即收起整页：换的是正在播的内容，留在这一页没有意义
-                    hideExploreController()
                 },
             )
 
@@ -737,7 +552,6 @@ fun VideoPlayerController(
             ControllerVideoInfo(
                 modifier = Modifier.focusable(),
                 show = showInfoSeekController,
-                isPlaying = uiState.playerState == PlayerState.Playing,
                 isSeeking = isSeeking,
                 goTime = goTime,
                 seekerState = seekerState.value,
@@ -749,48 +563,28 @@ fun VideoPlayerController(
                 isPgc = isPgc,
                 danmakuEnabled = uiState.danmakuState.enabledTypes.isNotEmpty(),
                 isLooping = isLooping,
-                hasNextEpisode = uiState.hasNextEpisode,
-                focusTarget = overlayFocus,
                 onDirectionLeft = ::onDirectionLeft,
                 onDirectionRight = ::onDirectionRight,
                 onSeekGoTime = ::onSeekGoTime,
                 onSeekToPosition = ::onSeekToPosition,
-                onPlayPause = {
-                    onPlay()
-                    onInteraction()
-                },
-                onPlayNext = {
-                    onPlayNext()
-                    onInteraction()
-                },
-                onDanmakuSwitchChange = {
-                    onToggleDanmaku()
-                    onInteraction()
-                },
+                onPlayPause = { onPlay() },
+                onDanmakuSwitchChange = { onToggleDanmaku() },
                 onShowSettings = { showMenuController = true },
-                onShowRelatedVideos = {
-                    if (showRelatedVideosController) {
-                        // 再点一次同一个按钮 = 只收起整合页，**底部播放控件留着**：
-                        // 按钮就在控件栏上，顺手把整条控件也关掉会连带把用户刚点的按钮一起消失
-                        hideExploreCountdown?.cancel()
-                        showRelatedVideosController = false
-                        overlayFocus = PlayerOverlayFocus.None
-                        onInteraction()
-                    } else {
-                        // 同一个整合页，但焦点直接给右侧相关视频栏
-                        overlayFocus = PlayerOverlayFocus.Related
-                        showRelatedVideosController = true
-                        startExploreAutoHide()
-                    }
-                },
+                onShowRelatedVideos = { showRelatedVideosController = true },
                 onGoToVideoInfo = onGoToVideoDetail,
-                onToggleLoop = {
-                    onToggleLoop()
-                    onInteraction()
-                },
+                onToggleLoop = { onToggleLoop() },
                 onGoToUpPage = onGoToUpPage,
                 onShowInteraction = onShowInteraction,
                 onShowComments = onShowComments,
+            )
+
+            // 分集列表
+            // 切换视频后保持列表展开，方便连续选集；按返回键收起
+            VideoListController(
+                show = showListController,
+                currentCid = uiState.cid,
+                videoList = uiState.videoList,
+                onPlayNewVideo = onPlayNewVideo,
             )
 
             // 设置菜单
@@ -816,6 +610,16 @@ fun VideoPlayerController(
                 onDanmakuSpeedFactorChange = { onDanmakuSettingChange(DanmakuSettingAction.SetSpeedFactor(it)) },
                 onDanmakuAreaChange = { onDanmakuSettingChange(DanmakuSettingAction.SetArea(it)) },
                 onDanmakuMaskChange = { onDanmakuSettingChange(DanmakuSettingAction.SetMaskEnabled(it)) },
+                onDanmakuBlockColorfulEnabledChange = {
+                    onDanmakuSettingChange(DanmakuSettingAction.SetBlockColorfulEnabled(it))
+                },
+                onDanmakuBlockRepeatEnabledChange = {
+                    onDanmakuSettingChange(DanmakuSettingAction.SetBlockRepeatEnabled(it))
+                },
+                onDanmakuBlockByUserFilterEnabledChange = {
+                    onDanmakuSettingChange(DanmakuSettingAction.SetBlockByUserFilterEnabled(it))
+                },
+                onDanmakuAiCloudLevelChange = { onDanmakuSettingChange(DanmakuSettingAction.SetAiCloudLevel(it)) },
                 onSubtitleChange = { subtitle -> onSubtitleChange(subtitle) },
                 onSubtitleSizeChange = { onSubtitleSettingChange(SubtitleSettingAction.SetFontSize(it)) },
                 onSubtitleBackgroundOpacityChange = { onSubtitleSettingChange(SubtitleSettingAction.SetOpacity(it)) },

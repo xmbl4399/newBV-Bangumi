@@ -66,28 +66,6 @@ import dev.frost819.newbv.core.theme.BVTheme
 import kotlinx.coroutines.delay
 
 /**
- * 覆盖层唤出时的焦点落点。
- *
- * 由**唤出方式**决定，而不是各组件各自抢焦点：
- * 方向上键打开「选集 / 相关视频」整合页并把焦点交给**左侧分集栏**（[EpisodeList]），
- * 底部控件的「相关视频」按钮打开同一页但焦点落在**右侧相关栏**（[Related]），
- * 方向下键是明确想操作播放控件的意图（[ControlBar]）。
- */
-enum class PlayerOverlayFocus {
-    /** 未指定（触屏唤出等）：沿用旧行为，焦点落在进度条上。 */
-    None,
-
-    /** 焦点落在整合页左侧分集栏的当前集上。 */
-    EpisodeList,
-
-    /** 焦点落在底部播放控件行（播放/暂停那一栏）。 */
-    ControlBar,
-
-    /** 焦点落在整合页右侧相关视频栏的第一条。 */
-    Related,
-}
-
-/**
  * 播放器控制器信息层。
  *
  * 包含顶部标题+时钟和底部进度条+操作按钮两部分。
@@ -95,7 +73,6 @@ enum class PlayerOverlayFocus {
  *
  * @param modifier 修饰符
  * @param show 是否显示
- * @param isPlaying 是否正在播放（决定「播放 / 暂停」按钮显示哪个图标）
  * @param isSeeking 是否正在 seek
  * @param goTime seek 预览位置（毫秒）
  * @param seekerState 进度条状态
@@ -107,14 +84,11 @@ enum class PlayerOverlayFocus {
  * @param isPgc 是否来自番剧（为 true 时隐藏详情/UP/相关视频按钮）
  * @param danmakuEnabled 弹幕是否开启
  * @param isLooping 是否循环播放
- * @param hasNextEpisode 是否存在下一集（为 false 时不显示「下一集」按钮）
- * @param focusTarget 本次唤出的焦点落点（见 [PlayerOverlayFocus]）
  * @param onDirectionLeft seek 左移回调
  * @param onDirectionRight seek 右移回调
  * @param onSeekGoTime 确认 seek 回调
  * @param onSeekToPosition 触屏拖拽/点击进度条时 seek 到指定位置（毫秒）
  * @param onPlayPause 播放/暂停回调
- * @param onPlayNext 播放下一集回调
  * @param onDanmakuSwitchChange 弹幕开关回调
  * @param onShowSettings 打开设置回调
  * @param onShowRelatedVideos 打开相关视频回调
@@ -128,7 +102,6 @@ enum class PlayerOverlayFocus {
 fun ControllerVideoInfo(
     modifier: Modifier = Modifier,
     show: Boolean,
-    isPlaying: Boolean,
     isSeeking: Boolean,
     goTime: Long,
     seekerState: SeekerState,
@@ -140,14 +113,11 @@ fun ControllerVideoInfo(
     isPgc: Boolean,
     danmakuEnabled: Boolean,
     isLooping: Boolean,
-    hasNextEpisode: Boolean,
-    focusTarget: PlayerOverlayFocus = PlayerOverlayFocus.None,
     onDirectionLeft: () -> Unit,
     onDirectionRight: () -> Unit,
     onSeekGoTime: () -> Unit,
     onSeekToPosition: (Long) -> Unit,
     onPlayPause: () -> Unit,
-    onPlayNext: () -> Unit,
     onDanmakuSwitchChange: () -> Unit,
     onShowSettings: () -> Unit,
     onShowRelatedVideos: () -> Unit,
@@ -182,7 +152,6 @@ fun ControllerVideoInfo(
             ControllerVideoInfoBottom(
                 modifier = Modifier.align(Alignment.BottomCenter),
                 isSeeking = isSeeking,
-                isPlaying = isPlaying,
                 goTime = goTime,
                 seekerState = seekerState,
                 videoShot = videoShot,
@@ -190,14 +159,11 @@ fun ControllerVideoInfo(
                 isPgc = isPgc,
                 danmakuEnabled = danmakuEnabled,
                 isLooping = isLooping,
-                hasNextEpisode = hasNextEpisode,
-                focusTarget = focusTarget,
                 onDirectionLeft = onDirectionLeft,
                 onDirectionRight = onDirectionRight,
                 onSeekGoTime = onSeekGoTime,
                 onSeekToPosition = onSeekToPosition,
                 onPlayPause = onPlayPause,
-                onPlayNext = onPlayNext,
                 onDanmakuSwitchChange = onDanmakuSwitchChange,
                 onShowSettings = onShowSettings,
                 onShowRelatedVideos = onShowRelatedVideos,
@@ -292,15 +258,11 @@ fun ControllerVideoInfoTop(
 
 /**
  * 控制器底部信息（缩略图预览 + 时间 + 进度条 + 操作按钮）。
- *
- * @param isPlaying 是否正在播放（决定「播放 / 暂停」按钮显示哪个图标）
- * @param focusTarget 本次唤出的焦点落点（见 [PlayerOverlayFocus]）
  */
 @Composable
 fun ControllerVideoInfoBottom(
     modifier: Modifier = Modifier,
     isSeeking: Boolean,
-    isPlaying: Boolean,
     goTime: Long,
     seekerState: SeekerState,
     videoShot: VideoShot?,
@@ -308,14 +270,11 @@ fun ControllerVideoInfoBottom(
     isPgc: Boolean,
     danmakuEnabled: Boolean,
     isLooping: Boolean,
-    hasNextEpisode: Boolean,
-    focusTarget: PlayerOverlayFocus = PlayerOverlayFocus.None,
     onDirectionLeft: () -> Unit,
     onDirectionRight: () -> Unit,
     onSeekGoTime: () -> Unit,
     onSeekToPosition: (Long) -> Unit,
     onPlayPause: () -> Unit,
-    onPlayNext: () -> Unit,
     onDanmakuSwitchChange: () -> Unit,
     onShowSettings: () -> Unit,
     onShowRelatedVideos: () -> Unit,
@@ -330,18 +289,9 @@ fun ControllerVideoInfoBottom(
 
     var isSeekFocused by remember { mutableStateOf(false) }
 
-    // 按「唤出方式」决定焦点落点（见 [PlayerOverlayFocus]）。
-    // 整合页（上键 / 相关视频按钮）出现时这里必须完全不碰焦点：左栏由 VideoListController
-    // 定位到当前集，右栏由 PlayerExploreController 定位到第一条。
-    LaunchedEffect(focusTarget) {
-        when (focusTarget) {
-            PlayerOverlayFocus.ControlBar -> runCatching { buttonsFocusRequester.requestFocus() }
-            PlayerOverlayFocus.EpisodeList, PlayerOverlayFocus.Related -> Unit
-            PlayerOverlayFocus.None -> {
-                delay(50)
-                runCatching { seekFocusRequester.requestFocus() }
-            }
-        }
+    LaunchedEffect(Unit) {
+        delay(50)
+        runCatching { seekFocusRequester.requestFocus() }
     }
 
     Column(
@@ -449,14 +399,6 @@ fun ControllerVideoInfoBottom(
                                 true
                             }
 
-                            Key.DirectionUp -> {
-                                // 进度条已经是播放控件里最上面的一行：上键就地消费，
-                                // 不再交给焦点系统上移（否则焦点会逃出播放控件），
-                                // 也不唤出整合页（那由根节点在控件不可见时才做）。
-                                if (it.type == KeyEventType.KeyUp) return@onKeyEvent true
-                                true
-                            }
-
                             Key.DirectionDown -> {
                                 if (it.type == KeyEventType.KeyUp) return@onKeyEvent true
                                 buttonsFocusRequester.requestFocus()
@@ -479,20 +421,7 @@ fun ControllerVideoInfoBottom(
         // 操作按钮行
         val icons =
             buildList {
-                // 播放 / 暂停拆成两个独立图标：播放中显示「暂停」，暂停中显示「播放」。
-                // 上游把两者画进同一张固定图标（play_pause_24px）里，按钮外观与实际
-                // 播放状态无关，看不出点下去会怎样，故不再使用。
-                add(
-                    ControllerIcon(
-                        if (isPlaying) R.drawable.pause_24px else R.drawable.play_24px,
-                        if (isPlaying) "暂停" else "播放",
-                        onPlayPause,
-                    ),
-                )
-                // 紧贴播放/暂停右侧：只有确实存在下一集时才出现，单集视频不占位
-                if (hasNextEpisode) {
-                    add(ControllerIcon(R.drawable.skip_next_24px, "下一集", onPlayNext))
-                }
+                add(ControllerIcon(R.drawable.play_pause_24px, "播放/暂停", onPlayPause))
                 add(
                     ControllerIcon(
                         if (danmakuEnabled) R.drawable.danmaku_on_24px else R.drawable.danmaku_off_24px,
@@ -538,11 +467,6 @@ fun ControllerVideoInfoBottom(
                         if (it.key == Key.DirectionUp) {
                             if (it.type == KeyEventType.KeyUp) return@onKeyEvent true
                             seekFocusRequester.requestFocus()
-                            return@onKeyEvent true
-                        }
-                        if (it.key == Key.DirectionDown) {
-                            // 按钮行已经是播放控件里最下面的一行：下键就地消费，
-                            // 免得焦点下移逃出播放控件。收起控件请长按下键。
                             return@onKeyEvent true
                         }
                         false
@@ -614,7 +538,6 @@ private fun ControllerVideoInfoPreview() {
         ControllerVideoInfo(
             show = true,
             isSeeking = false,
-            isPlaying = true,
             goTime = 0L,
             seekerState =
                 SeekerState(
@@ -630,13 +553,11 @@ private fun ControllerVideoInfoPreview() {
             isPgc = false,
             danmakuEnabled = true,
             isLooping = false,
-            hasNextEpisode = true,
             onDirectionLeft = {},
             onDirectionRight = {},
             onSeekGoTime = {},
             onSeekToPosition = {},
             onPlayPause = {},
-            onPlayNext = {},
             onDanmakuSwitchChange = {},
             onShowSettings = {},
             onShowRelatedVideos = {},

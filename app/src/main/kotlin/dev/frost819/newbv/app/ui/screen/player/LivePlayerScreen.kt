@@ -16,7 +16,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.navigation.NavController
 import dev.frost819.newbv.app.ui.component.player.LivePlayerController
 import dev.frost819.newbv.app.ui.component.rememberDoublePressExit
-import dev.frost819.newbv.app.viewmodel.live.LivePlayerState
+import dev.frost819.newbv.app.ui.navigation.UserSpaceRoute
+import dev.frost819.newbv.app.ui.state.live.LivePlayerState
+import dev.frost819.newbv.app.ui.state.live.errorMessage
 import dev.frost819.newbv.app.viewmodel.live.LivePlayerViewModel
 import dev.frost819.newbv.app.viewmodel.player.DanmakuViewModel
 import dev.frost819.newbv.danmaku.component.DanmakuPlayerCompose
@@ -58,7 +60,7 @@ fun LivePlayerScreen(
     LaunchedEffect(uiState.playerState) {
         when (uiState.playerState) {
             LivePlayerState.Playing -> danmakuViewModel.play()
-            LivePlayerState.Paused, LivePlayerState.Error, LivePlayerState.Ended -> danmakuViewModel.pause()
+            LivePlayerState.Paused, LivePlayerState.Ended, is LivePlayerState.Error -> danmakuViewModel.pause()
             else -> {}
         }
     }
@@ -78,8 +80,7 @@ fun LivePlayerScreen(
                 .background(Color.Black),
         isPlaying = uiState.playerState == LivePlayerState.Playing,
         isBuffering = uiState.isBuffering,
-        isError = uiState.playerState == LivePlayerState.Error,
-        errorMessage = uiState.errorMessage,
+        errorMessage = uiState.playerState.errorMessage,
         title = uiState.title,
         areaName = uiState.areaName,
         onlineCount = uiState.onlineCount,
@@ -93,6 +94,16 @@ fun LivePlayerScreen(
         onBack = handleBack,
         onPlayPause = { viewModel.togglePlayPause() },
         onRefresh = { viewModel.refresh() },
+        onGoToUpPage = {
+            val mid = uiState.upMid
+            if (mid != 0L) {
+                navController.navigate(
+                    UserSpaceRoute(mid = mid, name = uiState.upName, face = uiState.upFace),
+                ) {
+                    launchSingleTop = true
+                }
+            }
+        },
         onToggleDanmaku = { danmakuViewModel.toggleDanmaku() },
         onQualityChange = { viewModel.changeQuality(it) },
         onLineChange = { viewModel.changeLine(it) },

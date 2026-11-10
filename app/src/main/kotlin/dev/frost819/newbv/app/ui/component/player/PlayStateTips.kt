@@ -29,8 +29,7 @@ import dev.frost819.newbv.core.theme.BVTheme
  * 播放状态提示覆盖层。
  *
  * 根据播放状态显示不同的提示：
- * - **暂停**：右下角显示暂停图标（仅当非播放、非缓冲、非错误时），
- *   位置抬高到控制条上方，避免与进度条重叠
+ * - **暂停**：右下角显示暂停图标（仅当非播放、非缓冲、非错误时）
  * - **缓冲中**：屏幕中央显示加载指示器 + "缓冲中..."
  * - **错误**：屏幕中央显示错误信息
  *
@@ -39,34 +38,30 @@ import dev.frost819.newbv.core.theme.BVTheme
  * @param modifier 修饰符
  * @param isPlaying 是否正在播放
  * @param isBuffering 是否正在缓冲
- * @param isError 是否发生错误
- * @param errorMessage 错误信息（为 null 时显示"未知错误"）
+ * @param errorMessage 错误信息；非 null 即错误态（优先于缓冲与暂停提示）
  */
 @Composable
 fun PlayStateTips(
     modifier: Modifier = Modifier,
     isPlaying: Boolean,
     isBuffering: Boolean,
-    isError: Boolean,
     errorMessage: String? = null,
 ) {
     Box(modifier = modifier.fillMaxSize()) {
-        if (!isPlaying && !isBuffering && !isError) {
+        if (!isPlaying && !isBuffering && errorMessage == null) {
             PauseIcon(
                 modifier =
                     Modifier
                         .align(Alignment.BottomEnd)
-                        // 原位置（end/bottom 各 24dp）会压在进度条与按钮行之间，观感很差；
-                        // 往左上挪到控件区上方，避开进度条
-                        .padding(end = 40.dp, bottom = 88.dp),
+                        .padding(24.dp),
             )
         }
-        if (isBuffering && !isError) {
+        if (isBuffering && errorMessage == null) {
             BufferingTip(
                 modifier = Modifier.align(Alignment.Center),
             )
         }
-        if (isError) {
+        if (errorMessage != null) {
             PlayErrorTip(
                 modifier = Modifier.align(Alignment.Center),
                 errorMessage = errorMessage,
@@ -79,7 +74,6 @@ fun PlayStateTips(
  * 暂停图标。
  *
  * 右下角显示的半透明暂停图标，提示用户当前处于暂停状态。
- * 抬高到播放控件（进度条 + 按钮行）上方，避免遮住进度条。
  */
 @Composable
 fun PauseIcon(modifier: Modifier = Modifier) {
@@ -141,14 +135,14 @@ fun BufferingTip(modifier: Modifier = Modifier) {
 /**
  * 播放错误提示。
  *
- * 屏幕中央显示的半透明错误框，包含标题和错误信息。
+ * 屏幕中央显示半透明错误框：标题 + 具体错误信息。
  *
- * @param errorMessage 错误信息（为 null 时显示"未知错误"）
+ * @param errorMessage 错误信息
  */
 @Composable
 fun PlayErrorTip(
     modifier: Modifier = Modifier,
-    errorMessage: String?,
+    errorMessage: String,
 ) {
     Surface(
         modifier = modifier,
@@ -163,12 +157,11 @@ fun PlayErrorTip(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                text = "播放器正在抽风",
+                text = "播放错误",
                 style = MaterialTheme.typography.titleLarge,
             )
-            Text(text = " _(:з」∠)_")
             Spacer(modifier = Modifier.height(12.dp))
-            Text(text = "错误信息：${errorMessage ?: "未知错误"}")
+            Text(text = "错误信息：$errorMessage")
         }
     }
 }
@@ -182,7 +175,6 @@ private fun PlayStateTipsPausedPreview() {
         PlayStateTips(
             isPlaying = false,
             isBuffering = false,
-            isError = false,
         )
     }
 }
@@ -194,7 +186,6 @@ private fun PlayStateTipsBufferingPreview() {
         PlayStateTips(
             isPlaying = false,
             isBuffering = true,
-            isError = false,
         )
     }
 }
@@ -206,7 +197,6 @@ private fun PlayStateTipsErrorPreview() {
         PlayStateTips(
             isPlaying = false,
             isBuffering = false,
-            isError = true,
             errorMessage = "网络连接失败 (404)",
         )
     }
