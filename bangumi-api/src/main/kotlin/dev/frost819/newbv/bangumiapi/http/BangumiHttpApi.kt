@@ -1,5 +1,6 @@
 package dev.frost819.newbv.bangumiapi.http
 
+import dev.frost819.newbv.bangumiapi.entity.BangumiCalendarDay
 import dev.frost819.newbv.bangumiapi.entity.BangumiSubjectPage
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
@@ -22,7 +23,11 @@ import kotlin.coroutines.cancellation.CancellationException
 /**
  * Bangumi（bgm.tv）HTTP 接口客户端。
  *
- * 只封装 v0 列表端点 `GET /v0/subjects`。**不使用** p1 通路作为默认实现：
+ * 封装两个端点：
+ * - `GET /v0/subjects`：按「年 + 月 + 分类」浏览（[getSubjects]）；
+ * - `GET /calendar`：全站周历，一次返回周一至周日的在播番剧（[getCalendar]）。
+ *
+ * **不使用** p1 通路作为默认实现：
  * p1 列表项**没有 `tags` 字段**，且 `total` 语义是页数不是条数，
  * 一旦切过去会导致约 33% 的卡片筛不出题材词。p1 仅作降级通路（后续阶段再补）。
  *
@@ -86,6 +91,27 @@ class BangumiHttpApi(
                     parameter("limit", limit)
                     parameter("offset", offset)
                 }.body()
+        }
+
+    /**
+     * 拉取全站周历（`GET /calendar`）。
+     *
+     * 一次请求返回**周一至周日 7 个分组**的在播番剧（实测约 83 KB / 112 条），
+     * 响应头带 `Cache-Control: max-age=3600`，调用方可在 1 小时内复用本结果。
+     *
+     * 与 [getSubjects] 的差异（两个端点字段不同，不能互替）：
+     * - 日历**没有** `eps` / `tags` / `meta_tags`，因此只能回答「周几播什么」，
+     *   回答不了「更新到第几话」；
+     * - 日历**有** `air_weekday` 与 `collection.doing`（在看人数）。
+     *
+     * @return 7 个分组（顺序为接口原序 Mon→Sun），**未做今日排序**；
+     *   需要「今日倒序」请用 [BangumiWeekday.orderFrom] 重排。
+     * @throws io.ktor.client.plugins.ClientRequestException 服务端返回**不可重试**的 4xx。
+     * @throws java.io.IOException 所有候选源都失败。
+     */
+    suspend fun getCalendar(): List<BangumiCalendarDay> =
+        fetchWithFallback { base ->
+            client.get("$base/calendar").body()
         }
 
     /**

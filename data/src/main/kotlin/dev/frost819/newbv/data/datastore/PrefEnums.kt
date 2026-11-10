@@ -284,6 +284,9 @@ enum class HomeTopNavItem(
     Dynamics(0),
     Recommend(1),
     Popular(2),
+
+    /** 新番表：按「今日 → 往前回溯」展示 Bangumi 周历，不是 B 站数据。 */
+    Calendar(10),
     TvAnime(3),
     AnimeMovie(4),
     JpDrama(5),

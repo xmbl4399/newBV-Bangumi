@@ -31,6 +31,7 @@ import dev.frost819.newbv.app.ui.component.FocusSaver
 import dev.frost819.newbv.app.ui.component.HomeTabItem
 import dev.frost819.newbv.app.ui.component.TopNav
 import dev.frost819.newbv.app.ui.component.bangumiCategory
+import dev.frost819.newbv.app.ui.screen.bangumi.BangumiCalendarContent
 import dev.frost819.newbv.app.ui.screen.bangumi.BangumiContent
 import dev.frost819.newbv.app.viewmodel.home.HomeViewModel
 import dev.frost819.newbv.data.datastore.HomeTopNavItem
@@ -143,6 +144,11 @@ fun HomeContent(
                     HomeTopNavItem.Popular ->
                         PopularScreen(
                             viewModel = viewModel,
+                            navController = navController,
+                            focusSaver = focusSaver,
+                        )
+                    HomeTopNavItem.Calendar ->
+                        BangumiCalendarContent(
                             navController = navController,
                             focusSaver = focusSaver,
                         )

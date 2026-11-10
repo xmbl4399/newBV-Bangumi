@@ -1,5 +1,6 @@
 package dev.frost819.newbv.bangumiapi
 
+import dev.frost819.newbv.bangumiapi.entity.BangumiCalendarSubject
 import dev.frost819.newbv.bangumiapi.entity.BangumiItem
 import dev.frost819.newbv.bangumiapi.entity.BangumiSubject
 import dev.frost819.newbv.bangumiapi.tag.BangumiTagPicker
@@ -37,4 +38,31 @@ object BangumiNormalizer {
             metaTags = subject.metaTags.filter { it.isNotBlank() }.distinct(),
         )
     }
+
+    /**
+     * 归一化日历接口的条目（`GET /calendar` 的 `items[]`）。
+     *
+     * 与 [normalize] 的差异来自两个端点的字段差异（见 [BangumiCalendarSubject]）：
+     * - 日期取 `air_date` 而不是 `date`；
+     * - **`eps` 置 null**：日历不返回集数，硬填 0 会让卡片显示「0话」这类错误信息；
+     * - **`tags` 留空**：日历不返回用户投票词，白名单无处可取；
+     * - `metaTags` 留空（同理，日历没有 `meta_tags`）。
+     *
+     * @param subject 日历接口返回的原始条目。
+     * @return 归一化后的条目。
+     */
+    fun normalizeCalendar(subject: BangumiCalendarSubject): BangumiItem =
+        BangumiItem(
+            id = subject.id,
+            title = subject.nameCn.ifBlank { subject.name },
+            date = subject.airDate,
+            // 日历不返回集数：null 表示未知，UI 据此不显示集数角标
+            eps = null,
+            score = subject.rating.score,
+            votes = subject.rating.total,
+            cover = subject.images.common.ifBlank { subject.images.large },
+            // 日历不返回投票词，无题材 tag 可展示
+            tags = emptyList(),
+            metaTags = emptyList(),
+        )
 }

@@ -396,7 +396,7 @@ object Prefs {
     /** 首页置顶 Tab（默认「热门」，与产品约定一致）。 */
     var firstHomeTopNavItem by pref(
         PrefKeys.firstHomeTopNavItem,
-        HomeTopNavItem.Popular,
+        HomeTopNavItem.Recommend,
         save = { it.code },
         restore = { HomeTopNavItem.fromCode(it) },
     )

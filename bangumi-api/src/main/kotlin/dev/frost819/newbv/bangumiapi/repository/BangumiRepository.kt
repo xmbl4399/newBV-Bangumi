@@ -2,9 +2,11 @@ package dev.frost819.newbv.bangumiapi.repository
 
 import dev.frost819.newbv.bangumiapi.BangumiNormalizer
 import dev.frost819.newbv.bangumiapi.cache.BangumiDiskCache
+import dev.frost819.newbv.bangumiapi.entity.BangumiCalendarGroup
 import dev.frost819.newbv.bangumiapi.entity.BangumiCategory
 import dev.frost819.newbv.bangumiapi.entity.BangumiItem
 import dev.frost819.newbv.bangumiapi.entity.BangumiMonthResult
+import dev.frost819.newbv.bangumiapi.entity.BangumiWeekday
 import dev.frost819.newbv.bangumiapi.http.BangumiHttpApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.ProducerScope
@@ -18,7 +20,7 @@ import kotlinx.coroutines.sync.withPermit
 /**
  * Bangumi 条目数据仓库。
  *
- * 数据源：`GET https://api.bgm.tv/v0/subjects?type=&cat=&year=&month=&limit=100&offset=N`，
+ * 数据源一（按年月浏览）：`GET https://api.bgm.tv/v0/subjects?type=&cat=&year=&month=&limit=100&offset=N`，
  * **取数口径与排序规则整体照搬 blbl-Bangumi 的 `core/api/BangumiApi.kt`**，不自行发明：
  * - **不带 `sort` 参数**。`sort=rank` 与 `year+month` 组合在服务端不稳定，
  *   实测 2026-08 的 `cat=3`（剧场版）无 `sort` 返回 11 条、带 `sort=rank` 只回 3 条（数据截断）；
@@ -34,6 +36,50 @@ class BangumiRepository(
     private val httpApi: BangumiHttpApi = BangumiHttpApi(),
     private val cache: BangumiDiskCache? = null,
 ) {
+    /**
+     * 拉取全站周历并按「今日倒序」排好（`GET /calendar`）。
+     *
+     * 排序语义见 [BangumiWeekday.orderFrom]：今天周三 → 周三、周二、周一、周日…
+     * 即「今天 → 往前回溯」，用户打开这一页先看到今天在播什么。
+     *
+     * 与 [browseYearMonth] 的区别：
+     * - **不分年月**，一次拿到全年在播的全部番剧（接口只按星期分组，不按日期筛）；
+     * - **不按评分排序**：周历的语义是「今天有哪些在播」，按接口原序（在看人数高的
+     *   通常在前）即可，强行按评分排会让冷门新番全部沉底、热门续作扎堆，反而更难扫；
+     * - 支持 [hideNoScore] 与 [browseYearMonth] 同口径：在分组内剔除无评分条目，
+     *   但**保留空分组**（「今天没有可显示的番剧」本身是有效信息，直接吞掉会让
+     *   用户以为那天接口挂了）。
+     *
+     * @param today 今天的星期，用于决定排序起点与 [BangumiCalendarGroup.isToday]。
+     * @param hideNoScore 是否剔除无评分条目（设置页「隐藏无评分条目」）。
+     * @return 长度恒为 7 的分组列表，首元素恒为 [today]。
+     * @throws java.io.IOException 网络异常或超时。
+     */
+    suspend fun loadCalendar(
+        today: BangumiWeekday,
+        hideNoScore: Boolean = false,
+    ): List<BangumiCalendarGroup> {
+        val days = httpApi.getCalendar()
+
+        // 接口按 Mon→Sun 返回，先建 id -> 条目 的索引，再按「今日倒序」取
+        val byWeekday: Map<Int, List<BangumiItem>> =
+            days.associate { day ->
+                day.weekday.id to
+                    day.items
+                        .filter { it.id > 0 }
+                        .map(BangumiNormalizer::normalizeCalendar)
+            }
+
+        return BangumiWeekday.orderFrom(today).map { weekday ->
+            val items = byWeekday[weekday.id].orEmpty()
+            BangumiCalendarGroup(
+                weekday = weekday,
+                items = if (hideNoScore) items.filter { it.hasScore } else items,
+                isToday = weekday == today,
+            )
+        }
+    }
+
     /**
      * 拉取某分类某年某月的全部条目（自动翻页）。
      *

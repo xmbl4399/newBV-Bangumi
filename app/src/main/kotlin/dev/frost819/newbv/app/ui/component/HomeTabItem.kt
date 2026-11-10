@@ -19,6 +19,7 @@ data class HomeTabItem(
             HomeTopNavItem.Dynamics -> "动态"
             HomeTopNavItem.Recommend -> "推荐"
             HomeTopNavItem.Popular -> "热门"
+            HomeTopNavItem.Calendar -> "新番表"
             HomeTopNavItem.TvAnime -> "TV动画"
             HomeTopNavItem.AnimeMovie -> "其他动画"
             HomeTopNavItem.JpDrama -> "日剧"
@@ -47,5 +48,9 @@ val HomeTopNavItem.bangumiCategory: BangumiCategory?
             HomeTopNavItem.ChineseDrama -> BangumiCategory.ChineseDrama
             HomeTopNavItem.KoreanDrama -> BangumiCategory.KoreanDrama
             HomeTopNavItem.Movie -> BangumiCategory.Movie
-            HomeTopNavItem.Dynamics, HomeTopNavItem.Recommend, HomeTopNavItem.Popular -> null
+            HomeTopNavItem.Dynamics,
+            HomeTopNavItem.Recommend,
+            HomeTopNavItem.Popular,
+            HomeTopNavItem.Calendar,
+            -> null
         }

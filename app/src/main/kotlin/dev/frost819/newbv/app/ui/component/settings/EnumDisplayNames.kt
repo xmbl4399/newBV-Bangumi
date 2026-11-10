@@ -96,6 +96,7 @@ val HomeTopNavItem.displayName: String
             HomeTopNavItem.Dynamics -> "动态"
             HomeTopNavItem.Recommend -> "推荐"
             HomeTopNavItem.Popular -> "热门"
+            HomeTopNavItem.Calendar -> "新番表"
             HomeTopNavItem.TvAnime -> "TV动画"
             HomeTopNavItem.AnimeMovie -> "其他动画"
             HomeTopNavItem.JpDrama -> "日剧"
