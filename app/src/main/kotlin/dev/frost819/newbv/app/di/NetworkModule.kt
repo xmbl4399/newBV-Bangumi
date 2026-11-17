@@ -14,6 +14,7 @@ import dev.frost819.newbv.bangumiapi.cache.BangumiDiskCache
 import dev.frost819.newbv.bangumiapi.http.BangumiHttpApi
 import dev.frost819.newbv.bangumiapi.repository.BangumiRepository
 import dev.frost819.newbv.biliapi.http.BiliHttpApi
+import dev.frost819.newbv.biliapi.http.util.useSharedBiliClient
 import dev.frost819.newbv.biliapi.repositories.AuthRepository
 import dev.frost819.newbv.biliapi.repositories.ChannelRepository
 import dev.frost819.newbv.biliapi.repositories.CoinRepository
@@ -379,8 +380,8 @@ object NetworkModule {
     fun provideHttpClient(): HttpClient =
         HttpClient(OkHttp) {
             engine {
+                useSharedBiliClient()
                 config {
-                    connectTimeout(10, TimeUnit.SECONDS)
                     readTimeout(15, TimeUnit.SECONDS)
                     writeTimeout(15, TimeUnit.SECONDS)
                 }

@@ -27,6 +27,8 @@ import dev.frost819.newbv.app.ui.component.settings.SettingListItem
 import dev.frost819.newbv.app.ui.component.settings.displayName
 import dev.frost819.newbv.app.ui.screen.settings.SettingsMenuNavItem
 import dev.frost819.newbv.bangumiapi.entity.BangumiApiSource
+import dev.frost819.newbv.biliapi.entity.IpFamilyPreference
+import dev.frost819.newbv.biliapi.http.util.BiliNetworkConfig
 import dev.frost819.newbv.data.datastore.ApiType
 import dev.frost819.newbv.data.datastore.Prefs
 
@@ -48,6 +50,8 @@ fun OtherSetting(
 
     var showPreferedApiDialog by remember { mutableStateOf(false) }
     var selectedApi by remember { mutableStateOf(Prefs.apiType) }
+    var showIpFamilyDialog by remember { mutableStateOf(false) }
+    var selectedIpFamily by remember { mutableStateOf(Prefs.ipFamilyPreference) }
     var crashReportEnabled by remember { mutableStateOf(Prefs.crashReportEnabled) }
     var hideNoScoreEnabled by remember { mutableStateOf(Prefs.hideNoScoreMedia) }
     var showBangumiApiDialog by remember { mutableStateOf(false) }
@@ -72,6 +76,12 @@ fun OtherSetting(
             title = "接口选择",
             supportText = "当前：${selectedApi.displayName}",
             onClick = { showPreferedApiDialog = true },
+        )
+
+        SettingListItem(
+            title = "网络地址族",
+            supportText = "当前：${selectedIpFamily.displayName}；IPv6 出口异常导致加载失败时可切换",
+            onClick = { showIpFamilyDialog = true },
         )
 
         SettingListItem(
@@ -142,6 +152,21 @@ fun OtherSetting(
             onSelect = {
                 Prefs.apiType = it
                 selectedApi = it
+            },
+            getDisplayName = { it.displayName },
+        )
+    }
+
+    if (showIpFamilyDialog) {
+        OptionDialog(
+            options = IpFamilyPreference.entries.toTypedArray(),
+            selectedOption = selectedIpFamily,
+            onDismiss = { showIpFamilyDialog = false },
+            onSelect = {
+                Prefs.ipFamilyPreference = it
+                // DNS 每次解析时读取该全局配置，修改后立即生效，无需重启
+                BiliNetworkConfig.addressFamily = it
+                selectedIpFamily = it
             },
             getDisplayName = { it.displayName },
         )
